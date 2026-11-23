@@ -95,9 +95,9 @@ header{flex-wrap:wrap;gap:10px 20px}
 .rows .insert-mark{right:0;width:18px;height:min(28px,calc(100% / var(--slots)));transform:translateY(-50%)}
 .insert-mark::before{content:"+";display:grid;place-items:center;width:15px;height:15px;background:var(--selected-surface);border-radius:4px}
 .remove-mark{color:var(--remove)}
-.remove-mark::before{content:"−";background:var(--cell)}
+.remove-mark::before{content:"−"}
 .insert-mark:is(:hover,:focus-visible)::before,.axes:has(.insert-band) .guided::before{background:var(--accent-light);color:var(--bg)}
-.remove-mark:is(:hover,:focus-visible,:active)::before{background:var(--remove);color:var(--bg)}
+
 .insert-band{position:absolute;inset:0;pointer-events:none}
 .insert-band i{position:absolute;background:repeating-linear-gradient(45deg,transparent 0 8px,color-mix(in srgb,var(--insert) 65%,transparent) 8px 10px),color-mix(in srgb,var(--insert) 22%,transparent);border:solid var(--insert);border-width:0}
 .insert-band[data-dir=x] i{border-inline-width:2px}
@@ -114,15 +114,16 @@ header{flex-wrap:wrap;gap:10px 20px}
 .columns .future-index{bottom:2px;height:24px;transform:translateX(-50%)}
 .rows .future-index{right:2px;width:46px;transform:translateY(-50%)}
 .slot-tools{display:contents}
-.strip-header{position:absolute;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);pointer-events:auto;border-radius:5px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.strip-header{position:absolute;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,14px);gap:4px;pointer-events:none}
 .columns .strip-header{bottom:1px;transform:translateX(-50%);width:min(52px,calc(70% / var(--slots)));height:24px}
 .rows .strip-header{right:1px;transform:translateY(-50%);width:48px;height:min(24px,calc(62% / var(--slots)))}
 .columns:not(:has([data-before])) .strip-header{width:min(52px,calc(96% / var(--slots)))}
-.strip-header>.strip-grip,.strip-header>.remove-mark{position:static;transform:none;width:100%;height:100%;border-radius:5px 0 0 5px}
-.strip-header>.remove-mark{border-radius:0 5px 5px 0;border-inline-start:1px solid var(--line)}
-.strip-header>.strip-grip:only-child{grid-column:1/-1;border-radius:5px}
-.strip-header>.remove-mark:is(:hover,:focus-visible){background:var(--remove);color:var(--on-accent)}
-.strip-header>.remove-mark::before{width:auto;height:auto}
+.strip-header>.strip-grip{position:static;transform:none;width:100%;height:100%;border-radius:5px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.strip-header>.strip-grip:only-child{grid-column:1/-1}
+.strip-header>.remove-mark{position:static;transform:none;place-self:center;width:min(100%,14px);height:min(100%,14px);min-width:0;min-height:0;background:transparent;color:var(--muted);font:500 13px/1 system-ui}
+.strip-header>.remove-mark:is(:hover,:active,:focus-visible){background:transparent;color:var(--remove)}
+.strip-header>.remove-mark::before{width:auto;height:auto;background:transparent;color:inherit;pointer-events:none}
+.strip-header>.remove-mark:focus-visible{outline:1px solid var(--remove);outline-offset:1px}
 .slot-tools .insert-mark:not(:hover,:focus-visible)::before{background:transparent}
 .slot-tools .remove-mark:not(:hover,:focus-visible){color:var(--muted)}
 .axes:has(.insert-band) .slot-tools .insert-mark.guided::before{content:"+";width:15px;height:15px;background:var(--insert);color:var(--bg)}
@@ -657,16 +658,16 @@ function renderInsertMarks(){
       header.style[dir==='x'?'left':'top']=100*(i+.5)/count+'%';
       group.append(header);header.append(stripGrip(dir,i,count));
       if(count>1)mark(i,true,header);
-      if(count<axis.length)mark(i,false,group);
+      if(dir==='y'||count<axis.length)mark(i,false,group);
     }
-    if(count<axis.length)mark(count,false,rail.lastElementChild);
+    if(dir==='y'||count<axis.length)mark(count,false,rail.lastElementChild);
   }
 }
 function innerStrip(p){
   const n=hit(p);
   let best=null,dist=3;
   for(const [dir,extent,limit,pixels] of [['x','w',model.width,wall.clientWidth],['y','h',model.height,wall.clientHeight]]){
-    if(limit>=axis.length)continue;
+    if(dir==='x'&&limit>=axis.length)continue;
     for(const side of [0,1]){
       const index=n[dir]+side*n[extent],gap=Math.abs(p[dir]-n[dir]-side*n[extent])*pixels/limit;
       if(index>0&&index<limit&&gap<dist){best={dir,index};dist=gap}
@@ -724,13 +725,13 @@ function previewPerimeter(box){
   const size=model.width+' × '+model.height;
   document.querySelector('.badge').textContent=drag.next?size+' → '+box.w+' × '+box.h:size;
 }
-function perimeterSteps(distance,pitch,previous,count){
+function perimeterSteps(distance,pitch,previous){
   // A short outward pull must work even beside the viewport boundary.
   const shift=Math.max(0,pitch/2-6);
   const scaled=(distance<0?distance-shift:distance)/pitch;
   const pad=Math.min(3,pitch*.15)/pitch,offset=scaled-previous;
   if(Math.abs(offset)<.5+pad)return previous;
-  return Math.max(count-axis.length,Math.round(scaled-Math.sign(offset)*pad));
+  return Math.round(scaled-Math.sign(offset)*pad);
 }
 function resizeBounds(state,l,t,r,b){
   l=Math.min(l,state.width-1);r=Math.min(r,state.width-1);
@@ -740,8 +741,10 @@ function resizeBounds(state,l,t,r,b){
 function outwardSteps(g,side,distance,origin,pitch,count){
   const horizontal=side==='e'||side==='w';
   const room=side==='w'||side==='n'?origin:(horizontal?innerWidth:innerHeight)-origin-1;
-  const limit=axis.length-count,first=Math.min(7,Math.max(2,room/3));
-  const stride=clamp((room-first)/3,12,Math.max(12,pitch));
+  const limit=horizontal?axis.length-count:Infinity;
+  const rowHandle=!horizontal&&g.kind==='perimeter';
+  const first=rowHandle?pitch/2:Math.min(7,Math.max(2,room/3));
+  const stride=rowHandle?pitch:clamp((room-first)/3,12,Math.max(12,pitch));
   g.growth??={};
   const arm=g.growth[side]??={steps:0,bonus:0,anchor:0,turn:0,retreating:false,timer:null};
   // Holding just outside the layout repeats. A deliberate reversal pauses the repeat.
@@ -752,7 +755,8 @@ function outwardSteps(g,side,distance,origin,pitch,count){
     arm.turn=Math.max(arm.turn,distance);
     if(distance<=arm.turn-4){arm.retreating=true;arm.turn=distance}
   }
-  const holding=!arm.retreating&&distance>=Math.min(14,Math.max(first,room-5));
+  const repeatAt=rowHandle?Math.max(1,room-2):Math.min(14,Math.max(first,room-5));
+  const holding=!arm.retreating&&distance>=repeatAt;
   if(!holding){clearTimeout(arm.timer);arm.timer=null}
   if(distance<=0){arm.steps=arm.bonus=arm.anchor=arm.turn=0;arm.retreating=false;return 0}
   const extra=arm.bonus*clamp(distance/Math.max(1,arm.anchor),0,1);
@@ -782,7 +786,8 @@ function perimeterBox(edge,dx,dy,previous,g=null){
       const growth=outwardSteps(g,side,-d,origin,pitch,count);
       if(d<0)return -growth;
     }
-    return perimeterSteps(d,pitch,prior,count);
+    const change=perimeterSteps(d,pitch,prior);
+    return side==='w'||side==='e'?Math.max(count-axis.length,change):change;
   }
   return resizeBounds(model,
     steps('w',dx,w,previous.x,model.width),steps('n',dy,h,previous.y,model.height),
@@ -838,7 +843,7 @@ function renderGridSize(){
     const edge=b.dataset.edge;
     const min=resizeBounds(model,edge.includes('w')?width:0,edge.includes('n')?height:0,edge.includes('e')?width:0,edge.includes('s')?height:0);
     const outwardX=width<axis.length&&(edge.includes('w')?'w':edge.includes('e')?'e':'');
-    const outwardY=height<axis.length&&(edge.includes('n')?'n':edge.includes('s')?'s':'');
+    const outwardY=edge.includes('n')?'n':edge.includes('s')?'s':'';
     const inwardX=min.x>0?'e':right(min)<width?'w':'';
     const inwardY=min.y>0?'s':bottom(min)<height?'n':'';
     const direction=(outwardY||inwardY||'')+(outwardX||inwardX||'');
