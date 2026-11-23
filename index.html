@@ -756,9 +756,11 @@ function resizeBounds(state,l,t,r,b){
 function outwardSteps(g,side,distance,origin,pitch){
   const horizontal=side==='e'||side==='w';
   const room=side==='w'||side==='n'?origin:(horizontal?innerWidth:innerHeight)-origin-1;
-  const rowHandle=!horizontal&&g.kind==='perimeter';
-  const first=rowHandle?pitch/2:Math.min(7,Math.max(2,room/3));
-  const stride=rowHandle?pitch:clamp((room-first)/3,12,Math.max(12,pitch));
+  const ring=g.kind==='perimeter';
+  const cellThreshold=Math.min(7,Math.max(2,room/3));
+  // Reserve room for several outward steps even when the rail is near the viewport edge.
+  const stride=ring?Math.min(pitch,Math.max(6,(room-12)/4)):clamp((room-cellThreshold)/3,12,Math.max(12,pitch));
+  const first=ring?stride/2:cellThreshold;
   g.growth??={};
   const arm=g.growth[side]??={steps:0,bonus:0,anchor:0,turn:0,retreating:false,timer:null};
   // Holding just outside the layout repeats. A deliberate reversal pauses the repeat.
@@ -769,7 +771,7 @@ function outwardSteps(g,side,distance,origin,pitch){
     arm.turn=Math.max(arm.turn,distance);
     if(distance<=arm.turn-4){arm.retreating=true;arm.turn=distance}
   }
-  const repeatAt=rowHandle?Math.max(1,room-2):Math.min(14,Math.max(first,room-5));
+  const repeatAt=ring?Math.max(1,Math.min(3*stride,room-16)):Math.min(14,Math.max(first,room-5));
   const holding=!arm.retreating&&distance>=repeatAt;
   if(!holding){clearTimeout(arm.timer);arm.timer=null}
   if(distance<=0){arm.steps=arm.bonus=arm.anchor=arm.turn=0;arm.retreating=false;return 0}
