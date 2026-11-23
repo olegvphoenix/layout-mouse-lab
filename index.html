@@ -91,15 +91,15 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 .grow.rail-corner .rail-grip{width:100%;height:100%}
 .grow.rail-corner .edge-grip,.corner{width:8px;height:8px;border-radius:50%}
 .grow:hover:enabled{background:var(--panel)}
-.grow:enabled:hover:not(:active) .rail-grip .edge-grip{background:var(--edge-hover)}
+.grow:enabled:is(:hover:not(:active),[data-held]) .rail-grip .edge-grip{background:var(--edge-hover)}
 .grow:not(.rail-corner)::before{content:"";position:absolute;pointer-events:none;background:var(--edge-hover);opacity:0}
 .grow[data-edge=w]::before{inset:0 10px 0 auto;width:4px}
 .grow[data-edge=e]::before{inset:0 auto 0 50%;width:4px;transform:translateX(-50%)}
 .grow:is([data-edge=n],[data-edge=s])::before{inset:50% 0 auto;height:4px;transform:translateY(-50%)}
-.axes:has(>.grow[data-edge*=w]:enabled:hover:not(:active))>.grow[data-edge=w]::before,
-.axes:has(>.grow[data-edge*=e]:enabled:hover:not(:active))>.grow[data-edge=e]::before,
-.axes:has(>.grow[data-edge*=n]:enabled:hover:not(:active))>.grow[data-edge=n]::before,
-.axes:has(>.grow[data-edge*=s]:enabled:hover:not(:active))>.grow[data-edge=s]::before{opacity:1}
+.axes:has(>.grow[data-edge*=w]:enabled:is(:hover:not(:active),[data-held]))>.grow[data-edge=w]::before,
+.axes:has(>.grow[data-edge*=e]:enabled:is(:hover:not(:active),[data-held]))>.grow[data-edge=e]::before,
+.axes:has(>.grow[data-edge*=n]:enabled:is(:hover:not(:active),[data-held]))>.grow[data-edge=n]::before,
+.axes:has(>.grow[data-edge*=s]:enabled:is(:hover:not(:active),[data-held]))>.grow[data-edge=s]::before{opacity:1}
 .selected[data-hover-edge*=n]>.edge-grip[data-side=n],.selected[data-hover-edge*=s]>.edge-grip[data-side=s],
 .selected[data-hover-edge*=w]>.edge-grip[data-side=w],.selected[data-hover-edge*=e]>.edge-grip[data-side=e],
 .selected[data-hover-edge=nw]>.nw,.selected[data-hover-edge=sw]>.sw,.selected[data-hover-edge=ne]>.ne,.selected[data-hover-edge=se]>.se{background:var(--edge-hover)}
@@ -265,7 +265,10 @@ function remember(next, message) {
   future=[]; model=next; leaveGesture(); render(); say(message);
 }
 function say(v){if($('status').textContent!==v)$('status').textContent=v}
-function leaveGesture(){wall.querySelector('.cell-lift')?.remove();drag=null;overlay.replaceChildren();wall.style.cursor='default'}
+function leaveGesture(){
+  if(drag?.kind==='perimeter')delete drag.button.dataset.held;
+  wall.querySelector('.cell-lift')?.remove();drag=null;overlay.replaceChildren();wall.style.cursor='default';
+}
 function croppedBounds(state,left,top,east,south){
   const occupied=state.nodes.filter(n=>n.children||state.feeds[n.key]);
   const keep=occupied.length?occupied.reduce(bounds):current(state);
@@ -849,6 +852,7 @@ for(const b of perimeter.querySelectorAll('.grow')){
     if(e.button!==0||drag)return;
     clearInsertionPreview();
     drag={kind:'perimeter',id:e.pointerId,x:e.clientX,y:e.clientY,next:null,button:b};
+    b.dataset.held='';
     b.setPointerCapture(e.pointerId);
   };
   b.onpointermove=e=>{
@@ -862,7 +866,7 @@ for(const b of perimeter.querySelectorAll('.grow')){
     if(drag?.kind!=='perimeter'||drag.id!==e.pointerId)return;
     b.onpointermove(e);
     const next=drag.next;
-    drag=null;
+    leaveGesture();
     if(next)remember(next,'Размер сетки '+next.width+' × '+next.height+'.');
   };
   b.onlostpointercapture=b.onpointercancel=()=>{if(drag?.button===b){leaveGesture();render()}};
