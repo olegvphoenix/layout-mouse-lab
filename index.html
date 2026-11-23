@@ -28,13 +28,15 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 .desk{display:block}.workspace{min-width:0}.history{gap:5px;margin-inline-start:auto}.history button{min-height:32px;padding-inline:9px;white-space:nowrap}.history #reset{margin-inline-start:6px}
 .axes{display:grid;gap:2px}
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:var(--wall);outline:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
+#wall:has(.tile.selected){overflow:clip;overflow-clip-margin:5px}
 .tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
-.name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame,.cell-hole::before{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2;--selection-stroke:4px;--grip-axis:5px}
-.selected .frame::before{content:"";position:absolute;inset:calc(var(--grip-axis) - 1.5px - var(--selection-stroke)/2);z-index:2;border:var(--selection-stroke) solid var(--accent);pointer-events:none}
-.selected[data-hover-edge*=n] .frame::before{border-top-color:var(--accent-light)}
-.selected[data-hover-edge*=s] .frame::before{border-bottom-color:var(--accent-light)}
-.selected[data-hover-edge*=w] .frame::before{border-left-color:var(--accent-light)}
-.selected[data-hover-edge*=e] .frame::before{border-right-color:var(--accent-light)}
+.name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame,.cell-hole::before{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2;--selection-stroke:4px;--grip-axis:0px}
+.tile.selected::before{content:"";position:absolute;inset:calc(var(--selection-stroke) / -2);box-shadow:inset 0 0 0 1px var(--wall);z-index:2;border:var(--selection-stroke) solid var(--accent);pointer-events:none}
+.selected[data-hover-edge*=n]::before{border-top-color:var(--accent-light)}
+.selected[data-hover-edge*=s]::before{border-bottom-color:var(--accent-light)}
+.selected[data-hover-edge*=w]::before{border-left-color:var(--accent-light)}
+.selected[data-hover-edge*=e]::before{border-right-color:var(--accent-light)}
+.tile.selected>:is(.corner,.edge-grip){pointer-events:auto}
 .selected .name{color:white;bottom:6px}.corner{position:absolute;z-index:3;pointer-events:none}.corner:is(.nw,.ne){top:calc(var(--grip-axis) - 4px)}.corner:is(.sw,.se){bottom:calc(var(--grip-axis) - 4px)}
 .corner:is(.nw,.sw){left:calc(var(--grip-axis) - 4px)}.corner:is(.ne,.se){right:calc(var(--grip-axis) - 4px)}
 .overlay{pointer-events:none;position:absolute;z-index:6;inset:0}.outline{position:absolute;box-shadow:inset 0 0 0 2px var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}.outline.destination{outline:2px dashed var(--accent-light);outline-offset:-3px;box-shadow:none;background:color-mix(in srgb,var(--accent) 12%,transparent)}.outline.source{background:transparent}.outline.pending{border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent);box-shadow:none}.outline.invalid{border-color:var(--warning);background:color-mix(in srgb,var(--warning) 15%,transparent)}.guide-line{position:absolute;z-index:7;background:var(--accent-light)}
@@ -123,7 +125,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .insert-rail .future-index{pointer-events:none}
 .insert-rail .future-index.inserted{color:var(--insert);font-weight:700}
 .remove-band{position:absolute;pointer-events:none;border:2px dashed var(--remove)}
-.multi-picked .frame::before{content:"";position:absolute;inset:0;border:3px solid var(--accent);z-index:2;pointer-events:none}
+.multi-picked:not(.selected) .frame::before{content:"";position:absolute;inset:0;border:3px solid var(--accent);z-index:2;pointer-events:none}
 .strip-grip{position:absolute;pointer-events:auto;touch-action:none;user-select:none;display:grid;place-items:center;padding:0;border:0;background:transparent;color:var(--muted);font:600 11px/1 system-ui;cursor:grab}
 .columns .future-index{bottom:2px;height:24px;transform:translateX(-50%)}
 .rows .future-index{right:0;width:calc(100% - 18px);transform:translateY(-50%)}
@@ -147,7 +149,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .strip-grip[aria-pressed=true],.strip-grip:hover:enabled{background:var(--accent);color:var(--on-accent)}
 .strip-grip:active{cursor:grabbing}
 .strip-grip{font-size:12px}
-#wall:has(.picked-strip) .tile.selected :is(.edge-grip,.corner),#wall:has(.picked-strip) .tile.selected .frame::before{display:none}
+#wall:has(.picked-strip) .tile.selected :is(.edge-grip,.corner),#wall:has(.picked-strip) .tile.selected::before{display:none}
 #strip-selection{position:absolute;inset:0;pointer-events:none}
 .picked-strip{position:absolute;background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}
 .picked-strip.blocked{background:color-mix(in srgb,var(--warning) 12%,transparent);box-shadow:inset 0 0 0 2px var(--warning)}
@@ -174,8 +176,8 @@ header{flex-wrap:wrap;gap:10px 20px}
 .cell-cargo .cargo-tile{outline:2px solid var(--accent-light);outline-offset:-2px;box-shadow:0 5px 16px #000c;background:var(--wall)}
 .tile.resize-live{z-index:7;pointer-events:none}
 .tile.resize-live .frame{opacity:.68}
-.tile.resize-live::after{content:"";position:absolute;inset:calc(var(--grip-axis) - var(--selection-stroke)/2);border:var(--selection-stroke) solid var(--accent);z-index:2;pointer-events:none}
-.tile.resize-live .frame::before{display:none}
+
+
 .outline.move-target{border:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 17%,transparent)}
 #wall:has(.cell-lift) > .overlay{z-index:9}
 .axes:has(.strip-lift) .strip-grip{cursor:grabbing}
