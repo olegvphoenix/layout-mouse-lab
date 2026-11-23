@@ -72,11 +72,12 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 .grow .rail-grip{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
 .grow .rail-grip{display:grid;place-items:center;width:100%;height:38px}
 .grow:is([data-edge=n],[data-edge=s]) .rail-grip{width:38px;height:100%}
-.grow .rail-grip .edge-grip,.grow .rail-grip .corner{position:static;transform:none}
+.grow .rail-grip .edge-grip{position:static;transform:none}
 .grow .rail-grip .edge-grip{width:5px;height:24px}
 .grow:is([data-edge=n],[data-edge=s]) .edge-grip{width:24px;height:5px}
 .grow.rail-corner .rail-grip{width:100%;height:100%}
-.grow:enabled:hover:not(:active) .rail-grip :is(.edge-grip,.corner){background:var(--accent-light)}
+.grow.rail-corner .edge-grip{width:8px;height:8px;border-radius:50%}
+.grow:enabled:hover:not(:active) .rail-grip .edge-grip{background:var(--accent-light)}
 .add-preview{position:absolute;border:2px dashed var(--insert);background:color-mix(in srgb,var(--insert) 20%,transparent)}
 
 .trim-preview,.remove-band{background:repeating-linear-gradient(135deg,transparent 0 8px,color-mix(in srgb,var(--remove) 65%,transparent) 8px 10px),color-mix(in srgb,var(--remove) 20%,transparent)}
@@ -95,12 +96,15 @@ header{flex-wrap:wrap;gap:10px 20px}
 .insert-mark{position:absolute;display:grid;place-items:center;pointer-events:auto;touch-action:none;padding:0;border:0;background:none;color:var(--insert);font:600 16px/1 system-ui;user-select:none}
 .columns .insert-mark{bottom:4px;width:min(28px,calc(100% / var(--slots)));height:18px;transform:translateX(-50%)}
 .rows .insert-mark{right:0;width:18px;height:min(28px,calc(100% / var(--slots)));transform:translateY(-50%)}
-.insert-mark::before{content:"";width:14px;height:14px;border-radius:4px}
-.insert-mark::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;transform:translate(-50%,-50%);pointer-events:none;background:linear-gradient(currentColor 0 0) center/8px 1px no-repeat,linear-gradient(currentColor 0 0) center/1px 8px no-repeat}
-.remove-mark::after{background-size:8px 1px,0 0}
+.insert-mark:not(.remove-mark)::before{
+  content:"";width:14px;height:14px;border-radius:4px;pointer-events:none;
+  background:linear-gradient(currentColor 0 0) center / 8px 2px no-repeat,
+             linear-gradient(currentColor 0 0) center / 2px 8px no-repeat;
+}
+.remove-mark::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;transform:translate(-50%,-50%);pointer-events:none;background:linear-gradient(currentColor 0 0) center/8px 1px no-repeat}
 .remove-mark{color:var(--remove)}
 .insert-mark:not(.remove-mark):is(:hover,:focus-visible,.guided){color:var(--bg)}
-.insert-mark:not(.remove-mark):is(:hover,:focus-visible,.guided)::before{background:var(--insert)}
+.insert-mark:not(.remove-mark):is(:hover,:focus-visible,.guided)::before{background-color:var(--insert)}
 
 .insert-band{position:absolute;inset:0;pointer-events:none}
 .insert-band i{position:absolute;background:repeating-linear-gradient(45deg,transparent 0 8px,color-mix(in srgb,var(--insert) 65%,transparent) 8px 10px),color-mix(in srgb,var(--insert) 22%,transparent);border:solid var(--insert);border-width:0}
@@ -760,7 +764,7 @@ function outwardSteps(g,side,distance,origin,pitch){
   const cellThreshold=Math.min(7,Math.max(2,room/3));
   // Reserve room for several outward steps even when the rail is near the viewport edge.
   const stride=ring?Math.min(pitch,Math.max(6,(room-12)/4)):clamp((room-cellThreshold)/3,12,Math.max(12,pitch));
-  const first=ring?stride/2:cellThreshold;
+  const first=ring?Math.min(stride/2,cellThreshold):cellThreshold;
   g.growth??={};
   const arm=g.growth[side]??={steps:0,bonus:0,anchor:0,turn:0,retreating:false,timer:null};
   // Holding just outside the layout repeats. A deliberate reversal pauses the repeat.
@@ -771,10 +775,11 @@ function outwardSteps(g,side,distance,origin,pitch){
     arm.turn=Math.max(arm.turn,distance);
     if(distance<=arm.turn-4){arm.retreating=true;arm.turn=distance}
   }
-  const repeatAt=ring?Math.max(1,Math.min(3*stride,room-16)):Math.min(14,Math.max(first,room-5));
-  const holding=!arm.retreating&&distance>=repeatAt;
-  if(!holding){clearTimeout(arm.timer);arm.timer=null}
-  if(distance<=0){arm.steps=arm.bonus=arm.anchor=arm.turn=0;arm.retreating=false;return 0}
+  if(distance<=0){
+    clearTimeout(arm.timer);arm.timer=null;
+    arm.steps=arm.bonus=arm.anchor=arm.turn=0;arm.retreating=false;
+    return 0;
+  }
   const extra=arm.bonus*clamp(distance/Math.max(1,arm.anchor),0,1);
   arm.distance=distance;
   const value=(distance-first)/stride+.5+extra;
@@ -782,6 +787,8 @@ function outwardSteps(g,side,distance,origin,pitch){
   if(Math.abs(value-arm.steps)>=.5+pad){
     arm.steps=Math.max(0,Math.round(value-Math.sign(value-arm.steps)*pad));
   }
+  const holding=!arm.retreating&&(ring?arm.steps>0:distance>=Math.min(14,Math.max(first,room-5)));
+  if(!holding){clearTimeout(arm.timer);arm.timer=null}
   if(holding&&arm.timer===null){
     arm.timer=setTimeout(()=>{
       arm.timer=null;
@@ -789,7 +796,7 @@ function outwardSteps(g,side,distance,origin,pitch){
       arm.bonus=arm.bonus*clamp(arm.distance/Math.max(1,arm.anchor),0,1)+1;
       arm.anchor=arm.distance;
       g.redraw();
-    },arm.bonus?450:700);
+    },ring?(arm.bonus?330:480):(arm.bonus?450:700));
   }
   return arm.steps;
 }
@@ -814,7 +821,7 @@ for(const b of perimeter.querySelectorAll('.grow')){
   grip.className='rail-grip';grip.setAttribute('aria-hidden','true');
   const corner=edge.length===2;
   b.classList.toggle('rail-corner',corner);
-  mark.className=corner?'corner':'edge-grip';
+  mark.className='edge-grip';
   grip.append(mark);b.replaceChildren(grip);
   b.onpointerdown=e=>{
     if(e.button!==0||drag)return;
