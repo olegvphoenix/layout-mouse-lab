@@ -30,7 +30,7 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:var(--wall);outline:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
 #wall:focus-visible:not([data-pointer-focus]) .tile.selected::before{outline:1px dashed var(--edge-hover);outline-offset:-5px}
 #wall:has(.tile.selected){z-index:1;overflow:clip;overflow-clip-margin:5px}
-.tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
+.tile{position:absolute;color:white}.tile>.frame{position:absolute;inset:1.5px;width:auto;height:auto}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
 .name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame,.cell-hole::before{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2;--selection-stroke:2px;--grip-axis:0px}
 .tile.selected::before{content:"";position:absolute;inset:calc(var(--selection-stroke) / -2);box-shadow:inset 0 0 0 1px var(--wall);z-index:2;border:var(--selection-stroke) solid var(--accent);pointer-events:none}
 .selected[data-hover-edge*=n]::before{top:-2px;border-top:4px solid var(--edge-hover)}
@@ -1175,7 +1175,26 @@ function cornerAxes(n,edge,state){
       crossBorder:box[cross]+(farCross?box[vertical?'h':'w']:0),farCross};
   });
 }
-function cornerSeams(base,axes,destination){
+// At a whole strip the corner changes neighbours. Bring the outer continuation
+// of the old seam home, then pick up the new continuation from its own position.
+function cornerContinuation(axes,start,destination,source,edge){
+  const weights=[1,1];
+  axes.forEach((a,i)=>{
+    const remaining=destination[a.axis]-a.line;
+    const distance=Math.min(1,Math.abs(remaining));
+    const grows=remaining*(edge.includes(a.axis==='x'?'e':'s')?1:-1)>0;
+    if(distance>.5&&(grows||source[a.span]>1)){
+      weights[i]=Math.min(weights[i],(1-distance)/distance);
+    }
+    if(a.line!==start[i].line){
+      weights[1-i]=Math.min(weights[1-i],2*distance);
+    }
+  });
+  // Keeping one seam aligned lets all four neighbours remain rectangles.
+  const largest=Math.max(...weights);
+  return largest?weights.map(weight=>weight/largest):weights;
+}
+function cornerSeams(base,axes,destination,weights){
   const origin=base.origin||{x:0,y:0},boxes=visibleBoxes(base),records=[];
   for(const a of axes){
     const groups=[],seeds=[];
@@ -1190,7 +1209,13 @@ function cornerSeams(base,axes,destination){
     const limits=groups.map(g=>seamLimits(g,boxes,1e-5));
     const dest=clamp(destination[a.axis],Math.max(...limits.map(v=>v[0])),Math.min(...limits.map(v=>v[1])));
     if(Math.abs(dest-a.border)<1e-7)continue;
-    for(const at of seeds)records.push({axis:a.axis,line:a.line+origin[a.axis],at:at+origin[a.cross],delta:dest-a.line});
+    seeds.forEach((at,i)=>{
+      const weight=i===0?1:weights[a.axis==='x'?0:1];
+      const border=a.border+(dest-a.border)*weight;
+      if(Math.abs(border-a.border)>1e-8){
+        records.push({axis:a.axis,line:a.line+origin[a.axis],at:at+origin[a.cross],delta:border-a.line});
+      }
+    });
   }
   return records.length?{...base,seams:[...(base.seams||[]),...records]}:base;
 }
@@ -1217,7 +1242,8 @@ function previewCorner(e,p){
     renderCells(g.cornerBase);renderGridSize();overlay.replaceChildren();g.extended=false;g.outlineKey=null;
     g.drawn=visibleBoxes(g.cornerBase);
   }
-  const candidate=cornerSeams(g.cornerBase,g.cornerAxes,destination);
+  const weights=cornerContinuation(g.cornerAxes,g.axes,destination,g.source,g.edge);
+  const candidate=cornerSeams(g.cornerBase,g.cornerAxes,destination,weights);
   const boxes=visibleBoxes(candidate),size={width:model.width,height:model.height};
   candidate.nodes.forEach((n,i)=>{
     const b=boxes.get(n);
