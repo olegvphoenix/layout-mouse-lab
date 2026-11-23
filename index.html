@@ -91,7 +91,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .insert-rail.columns{top:-32px;left:24px;right:24px;height:32px}
 .insert-rail.rows{left:-52px;top:24px;bottom:24px;width:52px}
 .insert-mark{position:absolute;display:grid;place-items:center;pointer-events:auto;touch-action:none;padding:0;border:0;background:none;color:var(--insert);font:600 16px/1 system-ui;user-select:none}
-.columns .insert-mark{bottom:0;width:min(28px,calc(100% / var(--slots)));height:18px;transform:translateX(-50%)}
+.columns .insert-mark{bottom:4px;width:min(28px,calc(100% / var(--slots)));height:18px;transform:translateX(-50%)}
 .rows .insert-mark{right:0;width:18px;height:min(28px,calc(100% / var(--slots)));transform:translateY(-50%)}
 .insert-mark::before{content:"+";display:grid;place-items:center;width:15px;height:15px;background:var(--selected-surface);border-radius:4px}
 .remove-mark{color:var(--remove)}
@@ -129,6 +129,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .axes:has(.insert-band) .slot-tools .insert-mark.guided::before{content:"+";width:15px;height:15px;background:var(--insert);color:var(--bg)}
 .insert-mark.guided:hover:enabled{background:transparent}
 .columns .insert-mark:not(.remove-mark){width:min(28px,calc(28% / var(--slots)))}
+.columns .insert-mark:not(.remove-mark)::before{translate:0 -1px}
 .rows .insert-mark:not(.remove-mark){height:min(28px,calc(36% / var(--slots)));right:15px}
 .strip-grip[aria-pressed=true],.strip-grip:hover:enabled{background:var(--accent);color:var(--on-accent)}
 .strip-grip:active{cursor:grabbing}
