@@ -85,7 +85,8 @@ header{flex-wrap:wrap;gap:10px 20px}
 .grid-presets{display:flex;align-items:center;flex-wrap:wrap;gap:3px;margin-inline-end:auto}
 .grid-presets span{color:var(--muted);font-size:13px;margin-inline-end:4px}
 .grid-presets button{padding:4px 7px;font-variant-numeric:tabular-nums}
-.layout-surface{padding:32px 0 0 52px}
+.layout-scroll{overflow-x:auto}
+.layout-surface{padding:32px 0 0 52px;min-width:var(--ruler-min-width,0)}
 .axes{position:relative}
 .insert-rail{position:absolute;pointer-events:none}
 .insert-rail.columns{top:-32px;left:24px;right:24px;height:32px}
@@ -103,7 +104,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .insert-band[data-dir=x] i{border-inline-width:2px}
 .insert-band[data-dir=y] i{border-block-width:2px}
 .insert-band .expands{position:absolute;box-shadow:inset 0 0 0 2px var(--accent)}
-.strip-grip[data-shift]::after{content:attr(data-shift);position:absolute;inset:0;display:grid;place-items:center;border-radius:inherit;background:var(--panel);color:var(--accent);white-space:nowrap;pointer-events:none;z-index:1}
+.strip-grip[data-shift]::after{content:attr(data-shift);position:absolute;inset:0 auto 0 50%;transform:translateX(-50%);min-width:100%;width:max-content;display:grid;place-items:center;border-radius:inherit;background:var(--panel);color:var(--accent);white-space:nowrap;pointer-events:none;z-index:1}
 .insert-rail.preview-order>.slot-tools{opacity:0}
 .axes:has(.preview-order) #strip-selection{visibility:hidden}
 .insert-rail .future-index{pointer-events:none}
@@ -112,15 +113,17 @@ header{flex-wrap:wrap;gap:10px 20px}
 .multi-picked .frame::before{content:"";position:absolute;inset:0;border:3px solid var(--accent);z-index:2;pointer-events:none}
 .strip-grip{position:absolute;pointer-events:auto;touch-action:none;user-select:none;display:grid;place-items:center;padding:0;border:0;background:transparent;color:var(--muted);font:600 11px/1 system-ui;cursor:grab}
 .columns .future-index{bottom:2px;height:24px;transform:translateX(-50%)}
-.rows .future-index{right:2px;width:46px;transform:translateY(-50%)}
+.rows .future-index{right:1px;width:30px;transform:translateY(-50%)}
 .slot-tools{display:contents}
 .strip-header{position:absolute;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,14px);gap:4px;pointer-events:none}
-.columns .strip-header{bottom:1px;transform:translateX(-50%);width:min(52px,calc(70% / var(--slots)));height:24px}
-.rows .strip-header{right:1px;transform:translateY(-50%);width:48px;height:min(24px,calc(62% / var(--slots)))}
-.columns:not(:has([data-before])) .strip-header{width:min(52px,calc(96% / var(--slots)))}
-.strip-header>.strip-grip{position:static;transform:none;width:100%;height:100%;border-radius:5px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.columns .strip-header{bottom:1px;transform:translateX(-50%);width:var(--letter-width,34px);height:24px;grid-template-columns:1fr}
+.rows .strip-header{grid-template-columns:14px 30px;right:1px;transform:translateY(-50%);width:48px;height:min(24px,calc(62% / var(--slots)))}
+.rows .strip-header>.strip-grip,.rows .strip-header>.strip-grip:only-child{grid-area:1/2}
+.rows .strip-header>.remove-mark{grid-area:1/1}
+.strip-header>.strip-grip{position:relative;transform:none;width:100%;height:100%;border-radius:5px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
 .strip-header>.strip-grip:only-child{grid-column:1/-1}
 .strip-header>.remove-mark{position:static;transform:none;place-self:center;width:min(100%,14px);height:min(100%,14px);min-width:0;min-height:0;background:transparent;color:var(--muted);font:500 13px/1 system-ui}
+.columns .strip-header>.remove-mark{position:absolute;left:calc(100% + 2px);top:50%;transform:translateY(-50%)}
 .strip-header>.remove-mark:is(:hover,:active,:focus-visible){border-radius:4px;background:var(--remove);color:var(--on-accent)}
 .strip-header>.remove-mark::before{width:auto;height:auto;background:transparent;color:inherit;pointer-events:none}
 .strip-header>.remove-mark:focus-visible{outline:1px solid var(--remove);outline-offset:1px}
@@ -128,9 +131,9 @@ header{flex-wrap:wrap;gap:10px 20px}
 .slot-tools .remove-mark:not(:hover,:focus-visible){color:var(--muted)}
 .axes:has(.insert-band) .slot-tools .insert-mark.guided::before{content:"+";width:15px;height:15px;background:var(--insert);color:var(--bg)}
 .insert-mark.guided:hover:enabled{background:transparent}
-.columns .insert-mark:not(.remove-mark){width:min(28px,calc(28% / var(--slots)))}
+.columns .insert-mark:not(.remove-mark){width:min(16px,calc(28% / var(--slots)))}
 .columns .insert-mark:not(.remove-mark)::before{translate:0 -1px}
-.rows .insert-mark:not(.remove-mark){width:16px;height:min(28px,calc(36% / var(--slots)))}
+.rows .insert-mark:not(.remove-mark){right:34px;width:16px;height:min(28px,calc(36% / var(--slots)))}
 .strip-grip[aria-pressed=true],.strip-grip:hover:enabled{background:var(--accent);color:var(--on-accent)}
 .strip-grip:active{cursor:grabbing}
 .strip-grip{font-size:12px}
@@ -174,7 +177,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 <button id="undo" disabled aria-keyshortcuts="Control+Z">↶ Отменить</button><button id="redo" disabled aria-keyshortcuts="Control+Shift+Z">↷ Повторить</button><button id="reset">Сбросить</button>
 </div></header>
 <div class="desk"><div class="workspace">
-<div class="layout-surface"><div class="axes">
+<div class="layout-scroll"><div class="layout-surface"><div class="axes">
 <div class="insert-rail columns" id="insert-columns"></div><div class="insert-rail rows" id="insert-rows"></div>
 <button class="grow" data-edge="nw" aria-label="Верхний левый угол сетки"></button>
 <button class="grow" data-edge="ne" aria-label="Верхний правый угол сетки"></button>
@@ -184,7 +187,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 <button class="grow" data-edge="w" aria-label="Левая граница сетки"></button>
 <div id="wall" tabindex="0" aria-label="Раскладка камер"><div id="tiles"></div><div id="strip-selection"></div><div class="overlay" id="overlay"></div></div>
 <button class="grow" data-edge="e" aria-label="Правая граница сетки"></button>
-<button class="grow" data-edge="s" aria-label="Нижняя граница сетки"></button></div></div>
+<button class="grow" data-edge="s" aria-label="Нижняя граница сетки"></button></div></div></div>
 <div class="strip"><span class="statusdot"></span><p id="status" role="status"></p></div>
 </div>
 <p id="return-info" role="status" class="sr-only"></p></div></main>
@@ -194,7 +197,13 @@ const images = ["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMC
 const $ = id => document.getElementById(id);
 const wall = $('wall'), tiles = $('tiles'), overlay = $('overlay');
 images.forEach((url,index)=>wall.style.setProperty('--still-'+index,'url('+url+')'));
-const axis = 'ABCDEFGHIJKLMNOP';
+function columnName(index) {
+  let name = '';
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    name = String.fromCharCode(65 + (n - 1) % 26) + name;
+  }
+  return name;
+}
 const channels = ['Вход','Проходная','Мост','Аллея','Холл','Парковка','Выезд','Сквер'];
 const missing = new Set([7,14,21,28,35,42,49,56]);
 const number = v => String(v+1).padStart(2,'0');
@@ -211,7 +220,7 @@ const contains = (a,b) => a.x<=b.x && a.y<=b.y && right(a)>=right(b) && bottom(a
 const overlaps = (a,b) => a.x<right(b) && right(a)>b.x && a.y<bottom(b) && bottom(a)>b.y;
 const bounds = (a,b) => rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.max(right(a),right(b))-Math.min(a.x,b.x),Math.max(bottom(a),bottom(b))-Math.min(a.y,b.y));
 const slot = (k,width=model.width) => rect(k%width,Math.floor(k/width),1,1);
-const address = r => axis[r.x]+(r.y+1);
+const address = r => columnName(r.x)+(r.y+1);
 const nameOf = (node,s=model) => s.feeds[node.key]?.name ?? 'Пусто';
 const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
 function seed(size=8) {
@@ -361,10 +370,10 @@ function editStrips(direction,index,removeCount=0){
 function stripLabel(dir,i){
   const count=dir==='x'?model.width:model.height;
   if(i===0||i===count)return dir==='x'?'Вставить столбец '+(i?'справа':'слева'):'Вставить строку '+(i?'снизу':'сверху');
-  return dir==='x'?'Вставить столбец между '+axis[i-1]+' и '+axis[i]:'Вставить строку между '+i+' и '+(i+1);
+  return dir==='x'?'Вставить столбец между '+columnName(i-1)+' и '+columnName(i):'Вставить строку между '+i+' и '+(i+1);
 }
 function removalLabel(dir,i,n=1){
-  const label=k=>dir==='x'?axis[k]:String(k+1);
+  const label=k=>dir==='x'?columnName(k):String(k+1);
   const noun=dir==='x'?(n===1?'столбец':'столбцы'):(n===1?'строку':'строки');
   return 'Удалить '+noun+' '+label(i)+(n>1?'–'+label(i+n-1):'');
 }
@@ -389,14 +398,17 @@ function previewInsertion(dir,i){
   const column=dir==='x',extent=column?'w':'h';
   const rail=$(column?'insert-columns':'insert-rows'),mark=rail.querySelector('[data-before="'+i+'"]');
   const header=rail.querySelector('.strip-grip[data-index="'+i+'"]');
-  if(header)header.dataset.shift=column?axis[i]+' → '+axis[i+1]:(i+1)+' ↓ '+(i+2);
+  if(header)header.dataset.shift=column?columnName(i)+' → '+columnName(i+1):(i+1)+' ↓ '+(i+2);
   mark?.classList.add('guided');
   const band=document.createElement('div');band.className='insert-band';
   band.dataset.dir=dir;
   const next=editStrips(dir,i);
-  for(let j=0;j<(column?next.height:next.width);j++){
-    const segment=document.createElement('i'),cell=column?rect(i,j,1,1):rect(j,i,1,1);
-    position(segment,cell,next);band.append(segment);
+  const count=column?model.width:model.height;
+  const start=Math.max(0,i-.5),size=Math.min(count,i+.5)-start;
+  for(let j=0;j<(column?model.height:model.width);j++){
+    const segment=document.createElement('i');
+    position(segment,column?rect(start,j,size,1):rect(j,start,1,size));
+    band.append(segment);
   }
   for(const n of model.nodes.filter(n=>n[dir]<i&&n[dir]+n[extent]>i)){
     const outline=document.createElement('span');outline.className='expands';
@@ -414,6 +426,9 @@ function startStrip(e,dir,i,remove=false){
   drag.next=previewInsertion(dir,i);drag.message=stripLabel(dir,i);
   const {next,band,rail}=insertionPreview,column=dir==='x',count=column?next.width:next.height;
   renderCells(next);
+  band.querySelectorAll('i').forEach((segment,j)=>{
+    position(segment,column?rect(i,j,1,1):rect(j,i,1,1),next);
+  });
   document.querySelector('.badge').textContent=model.width+' × '+model.height+' → '+next.width+' × '+next.height;
   band.querySelectorAll('.expands').forEach(n=>n.remove());
   for(const n of next.nodes.filter(n=>n[dir]<i&&n[dir]+(column?n.w:n.h)>i)){
@@ -424,7 +439,7 @@ function startStrip(e,dir,i,remove=false){
   for(let k=0;k<count;k++){
     const label=document.createElement('span');
     label.className='strip-grip future-index'+(k===i?' inserted':'');
-    label.setAttribute('aria-hidden','true');label.textContent=column?axis[k]:k+1;
+    label.setAttribute('aria-hidden','true');label.textContent=column?columnName(k):k+1;
     label.style[column?'left':'top']=100*(k+.5)/count+'%';rail.append(label);
   }
 }
@@ -581,14 +596,14 @@ function previewStripDrop(g,e){
       }
     }
   }
-  const label=k=>column?axis[k]:k+1;
+  const label=k=>column?columnName(k):k+1;
   g.message=g.next?(column?'Столбцы ':'Строки ')+g.indices.map(label).join(', ')+' → '+g.positions.map(label).join(', '):g.reason||'Исходное положение';
   $('return-info').textContent=g.message;say(g.message);
 }
 function stripGrip(dir,i,count){
   const b=document.createElement('button');
   b.className='strip-grip';b.dataset.dir=dir;b.dataset.index=i;
-  b.textContent=dir==='x'?axis[i]:String(i+1);
+  b.textContent=dir==='x'?columnName(i):String(i+1);
   b.setAttribute('aria-label',(dir==='x'?'Столбец ':'Строка ')+b.textContent);
   b.onpointerdown=e=>{
     if(drag||e.button!==0)return;
@@ -659,16 +674,15 @@ function renderInsertMarks(){
       header.style[dir==='x'?'left':'top']=100*(i+.5)/count+'%';
       group.append(header);header.append(stripGrip(dir,i,count));
       if(count>1)mark(i,true,header);
-      if(dir==='y'||count<axis.length)mark(i,false,group);
+      mark(i,false,group);
     }
-    if(dir==='y'||count<axis.length)mark(count,false,rail.lastElementChild);
+    mark(count,false,rail.lastElementChild);
   }
 }
 function innerStrip(p){
   const n=hit(p);
   let best=null,dist=3;
   for(const [dir,extent,limit,pixels] of [['x','w',model.width,wall.clientWidth],['y','h',model.height,wall.clientHeight]]){
-    if(dir==='x'&&limit>=axis.length)continue;
     for(const side of [0,1]){
       const index=n[dir]+side*n[extent],gap=Math.abs(p[dir]-n[dir]-side*n[extent])*pixels/limit;
       if(index>0&&index<limit&&gap<dist){best={dir,index};dist=gap}
@@ -739,10 +753,9 @@ function resizeBounds(state,l,t,r,b){
   t=Math.min(t,state.height-1);b=Math.min(b,state.height-1);
   return rect(l,t,state.width-l-r,state.height-t-b);
 }
-function outwardSteps(g,side,distance,origin,pitch,count){
+function outwardSteps(g,side,distance,origin,pitch){
   const horizontal=side==='e'||side==='w';
   const room=side==='w'||side==='n'?origin:(horizontal?innerWidth:innerHeight)-origin-1;
-  const limit=horizontal?axis.length-count:Infinity;
   const rowHandle=!horizontal&&g.kind==='perimeter';
   const first=rowHandle?pitch/2:Math.min(7,Math.max(2,room/3));
   const stride=rowHandle?pitch:clamp((room-first)/3,12,Math.max(12,pitch));
@@ -765,9 +778,9 @@ function outwardSteps(g,side,distance,origin,pitch,count){
   const value=(distance-first)/stride+.5+extra;
   const pad=Math.min(2,stride*.12)/stride;
   if(Math.abs(value-arm.steps)>=.5+pad){
-    arm.steps=clamp(Math.round(value-Math.sign(value-arm.steps)*pad),0,limit);
+    arm.steps=Math.max(0,Math.round(value-Math.sign(value-arm.steps)*pad));
   }
-  if(holding&&arm.steps<limit&&arm.timer===null){
+  if(holding&&arm.timer===null){
     arm.timer=setTimeout(()=>{
       arm.timer=null;
       if(drag!==g)return;
@@ -780,19 +793,18 @@ function outwardSteps(g,side,distance,origin,pitch,count){
 }
 function perimeterBox(edge,dx,dy,previous,g=null){
   const w=wall.clientWidth/model.width,h=wall.clientHeight/model.height;
-  function steps(side,d,pitch,prior,count){
+  function steps(side,d,pitch,prior){
     if(!edge.includes(side))return 0;
     if(g){
       const origin=side==='e'||side==='w'?g.x:g.y;
-      const growth=outwardSteps(g,side,-d,origin,pitch,count);
+      const growth=outwardSteps(g,side,-d,origin,pitch);
       if(d<0)return -growth;
     }
-    const change=perimeterSteps(d,pitch,prior);
-    return side==='w'||side==='e'?Math.max(count-axis.length,change):change;
+    return perimeterSteps(d,pitch,prior);
   }
   return resizeBounds(model,
-    steps('w',dx,w,previous.x,model.width),steps('n',dy,h,previous.y,model.height),
-    steps('e',-dx,w,model.width-right(previous),model.width),steps('s',-dy,h,model.height-bottom(previous),model.height));
+    steps('w',dx,w,previous.x),steps('n',dy,h,previous.y),
+    steps('e',-dx,w,model.width-right(previous)),steps('s',-dy,h,model.height-bottom(previous)));
 }
 for(const b of perimeter.querySelectorAll('.grow')){
   const edge=b.dataset.edge;
@@ -843,7 +855,7 @@ function renderGridSize(){
   for(const b of perimeter.querySelectorAll('.grow')){
     const edge=b.dataset.edge;
     const min=resizeBounds(model,edge.includes('w')?width:0,edge.includes('n')?height:0,edge.includes('e')?width:0,edge.includes('s')?height:0);
-    const outwardX=width<axis.length&&(edge.includes('w')?'w':edge.includes('e')?'e':'');
+    const outwardX=edge.includes('w')?'w':edge.includes('e')?'e':'';
     const outwardY=edge.includes('n')?'n':edge.includes('s')?'s':'';
     const inwardX=min.x>0?'e':right(min)<width?'w':'';
     const inwardY=min.y>0?'s':bottom(min)<height?'n':'';
@@ -1092,6 +1104,10 @@ function renderCells(state=model){
 }
 function render(){
   clearInsertionPreview();
+  const letterWidth = Math.max(34, columnName(model.width-1).length*10+4);
+  perimeter.style.setProperty('--letter-width',letterWidth+'px');
+  const pitch = letterWidth+48;
+  perimeter.parentElement.style.setProperty('--ruler-min-width',(100+model.width*pitch)+'px');
   renderGridSize();
   renderInsertMarks();
   if(stripPick&&(stripPick.model!==model))stripPick=null;
@@ -1139,14 +1155,14 @@ function resizeStep(distance,previous,pitch){
 function previewGridExtension(p,sx,sy){
   const {width,height}=model,{edge}=drag;
   const wallBounds=wall.getBoundingClientRect();
-  function extra(side,distance,unit,count){
+  function extra(side,distance,unit){
     if(!edge.includes(side))return 0;
     const origin={w:wallBounds.left,e:wallBounds.right,n:wallBounds.top,s:wallBounds.bottom}[side];
-    return outwardSteps(drag,side,distance*unit,origin,unit,count);
+    return outwardSteps(drag,side,distance*unit,origin,unit);
   }
   const w=wall.clientWidth/width,h=wall.clientHeight/height;
-  const left=extra('w',-p.x,w,width),rightCount=extra('e',p.x-width,w,width);
-  const top=extra('n',-p.y,h,height),below=extra('s',p.y-height,h,height);
+  const left=extra('w',-p.x,w),rightCount=extra('e',p.x-width,w);
+  const top=extra('n',-p.y,h),below=extra('s',p.y-height,h);
   if(!(left||rightCount||top||below)){
     if(drag.extended){drag.extended=false;renderCells();renderGridSize()}
     return false;
