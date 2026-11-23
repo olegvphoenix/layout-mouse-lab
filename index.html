@@ -1165,6 +1165,67 @@ function dividerAt(e,edge){
   if(e.altKey||(!atCenter&&Math.abs(normal-border)>6))return null;
   return {axis,cross,line,edge,at:n[cross],scale,onGrip:atCenter&&Math.abs(normal-border)<=6,tangent:tangent/tangentScale};
 }
+function cornerAxes(n,edge,state){
+  const box=visibleBoxes(state).get(n);
+  return ['x','y'].map(axis=>{
+    const vertical=axis==='x',cross=vertical?'y':'x',span=vertical?'w':'h';
+    const far=edge.includes(vertical?'e':'s'),farCross=edge.includes(vertical?'s':'e');
+    return {axis,cross,span,line:n[axis]+(far?n[span]:0),border:box[axis]+(far?box[span]:0),
+      vertex:n[cross]+(farCross?n[vertical?'h':'w']:0),
+      crossBorder:box[cross]+(farCross?box[vertical?'h':'w']:0),farCross};
+  });
+}
+function cornerSeams(base,axes,destination){
+  const origin=base.origin||{x:0,y:0},boxes=visibleBoxes(base),records=[];
+  for(const a of axes){
+    const groups=[],seeds=[];
+    // Include the continuation across the vertex only when it actually meets the handle.
+    for(const at of [a.vertex+(a.farCross?-.25:.25),a.vertex+(a.farCross?.25:-.25)]){
+      const group=seamComponent(base,boxes,a.axis,a.line,at);
+      if(!group||Math.abs(group.border-a.border)>1e-6||groups.some(g=>g.before.includes(group.before[0])))continue;
+      if(!group.before.some(n=>{const b=boxes.get(n);return b[a.cross]<=a.crossBorder+1e-6&&b[a.cross]+b[group.length]>=a.crossBorder-1e-6}))continue;
+      groups.push(group);seeds.push(at);
+    }
+    if(!groups.length)continue;
+    const limits=groups.map(g=>seamLimits(g,boxes,1e-5));
+    const dest=clamp(destination[a.axis],Math.max(...limits.map(v=>v[0])),Math.min(...limits.map(v=>v[1])));
+    if(Math.abs(dest-a.border)<1e-7)continue;
+    for(const at of seeds)records.push({axis:a.axis,line:a.line+origin[a.axis],at:at+origin[a.cross],delta:dest-a.line});
+  }
+  return records.length?{...base,seams:[...(base.seams||[]),...records]}:base;
+}
+function previewCorner(e,p){
+  const g=drag,wallBox=wall.getBoundingClientRect();
+  if(p.x<0||p.y<0||p.x>model.width||p.y>model.height){
+    if(g.cornerBase){renderCells();g.cornerBase=null}
+    resizePreview(p);return;
+  }
+  if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
+  const destination={},steps={};
+  for(const a of g.axes){
+    const horizontal=a.axis==='x',pitch=horizontal?wallBox.width/model.width:wallBox.height/model.height;
+    const delta=(horizontal?e.clientX-g.clientX:e.clientY-g.clientY)/pitch;
+    const target=a.border+delta,offset=target-a.line;
+    destination[a.axis]=target;
+    steps[a.axis]=delta===0?0:Math.trunc(offset);
+  }
+  const area=targetBox(g.source,g.edge,steps.x,steps.y);
+  if(!g.cornerBase||!equal(g.cornerArea,area)){
+    g.cornerBase=equal(area,g.source)?model:reshape(area,g.source);
+    if(!g.cornerBase){renderCells();g.outlineKey=null;resizePreview(p);return}
+    g.cornerArea=area;g.cornerAxes=cornerAxes(current(g.cornerBase),g.edge,g.cornerBase);
+    renderCells(g.cornerBase);renderGridSize();overlay.replaceChildren();g.extended=false;g.outlineKey=null;
+    g.drawn=visibleBoxes(g.cornerBase);
+  }
+  const candidate=cornerSeams(g.cornerBase,g.cornerAxes,destination);
+  const boxes=visibleBoxes(candidate),size={width:model.width,height:model.height};
+  candidate.nodes.forEach((n,i)=>{
+    const b=boxes.get(n);
+    if(!equal(b,g.drawn.get(n)))position(tiles.children[i],b,size);
+  });
+  g.drawn=boxes;g.next=candidate===model?null:candidate;
+  g.message='Пропорции ячеек изменены.';g.redraw=null;
+}
 function beginDivider(e,seam){
   const boxes=visibleBoxes(model),group=seamComponent(model,boxes,seam.axis,seam.line,seam.at);
   if(!group)return false;
@@ -1429,7 +1490,15 @@ function hit(p){
   const x=clamp(p.x,0,model.width-.00001),y=clamp(p.y,0,model.height-.00001);
   return model.nodes.find(n=>x>=n.x&&x<right(n)&&y>=n.y&&y<bottom(n))||current();
 }
-function edgeAt(p){
+function edgeAt(p,e){
+  if(e&&!model.selection){
+    const b=tiles.querySelector('.tile.selected')?.getBoundingClientRect();
+    if(b){
+      const nearX=Math.abs(e.clientX-b.left)<=6?'w':Math.abs(e.clientX-b.right)<=6?'e':'';
+      const nearY=Math.abs(e.clientY-b.top)<=6?'n':Math.abs(e.clientY-b.bottom)<=6?'s':'';
+      if(nearX&&nearY)return nearY+nearX;
+    }
+  }
   if(model.selection)return '';
   const r=current(),b=wall.getBoundingClientRect(),dx=6*model.width/b.width,dy=6*model.height/b.height;
   const nearX=Math.abs(p.x-r.x)<=Math.min(2*dx,r.w/4)?'w':Math.abs(p.x-right(r))<=Math.min(2*dx,r.w/4)?'e':'';
@@ -1559,7 +1628,7 @@ function resizePreview(p){
   say('Тяните к следующей позиции сетки. Минимальная ячейка — 1 × 1, границы задаёт внешнее кольцо.');
 }
 function cursorHint(edge,node){
-  if(edge.length===2)return 'Угол выбранной ячейки. Тяните по диагонали для поглощения. Тяните внутрь для возврата.';
+  if(edge.length===2)return 'Тяните угол, чтобы изменить ширину и высоту ячейки.';
   if(edge)return 'Граница выбранной ячейки. Тяните к соседней линии сетки.';
   return 'Центр '+address(node)+' · '+nameOf(node)+'. Нажмите для выбора или перетащите содержимое.';
 }
@@ -1578,7 +1647,7 @@ wall.addEventListener('pointerdown',e=>{
   highlightEdge('');
   e.preventDefault();
   wall.dataset.pointerFocus="";wall.focus({preventScroll:true});
-  const p=point(e),target=hit(p),edge=edgeAt(p);
+  const p=point(e),target=hit(p),edge=edgeAt(p,e);
   if((e.ctrlKey||e.metaKey)){clearInsertionPreview();togglePicked(target.key);return}
   if(e.shiftKey){clearInsertionPreview();pickRange(target);return}
   const seam=dividerAt(e,edge);
@@ -1591,6 +1660,10 @@ wall.addEventListener('pointerdown',e=>{
   if(!members)choose(source.key);
   wall.setPointerCapture(e.pointerId);
   drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,next:null};
+  if(edge.length===2&&!e.altKey){
+    const axes=cornerAxes(source,edge,model);
+    if(axes.every(a=>a.line>0&&a.line<(a.axis==='x'?model.width:model.height)))drag.axes=axes;
+  }
 });
 wall.addEventListener('pointermove',e=>{
   const p=point(e);
@@ -1599,7 +1672,7 @@ wall.addEventListener('pointermove',e=>{
     if(e.target.closest('.clear-camera')){
       clearInsertionPreview();highlightEdge('');wall.style.cursor='default';return;
     }
-    const edge=edgeAt(p),strip=!edge&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey?innerStrip(p):null;
+    const edge=edgeAt(p,e),strip=!edge&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey?innerStrip(p):null;
     const seam=dividerAt(e,edge);
     if(seam){
       const group=seamComponent(model,visibleBoxes(model),seam.axis,seam.line,seam.at);
@@ -1613,7 +1686,7 @@ wall.addEventListener('pointermove',e=>{
   if(drag.kind==='divider'){previewDivider(e);return}
   if(Math.hypot(e.clientX-drag.clientX,e.clientY-drag.clientY)>=4)drag.moved=true;
   if(!drag.moved)return;
-  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);resizePreview(p);return}
+  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);if(drag.axes)previewCorner(e,p);else resizePreview(p);return}
   carryCells(drag,e);
   if(drag.source.children||drag.members){wall.style.cursor='grabbing';previewGroupMove(p);return}
   const target=hit(p),source=drag.source;
@@ -1655,6 +1728,7 @@ wall.addEventListener('pointerup',e=>{
     overlay.replaceChildren();return;
   }
   const g=drag,p=point(e),outside=p.x<0||p.y<0||p.x>model.width||p.y>model.height;
+  if(g.axes&&g.moved)previewCorner(e,p);
   if(outside&&g.kind!=='resize'){cancelGesture('Действие отменено за пределами раскладки.');return}
   // Commit the resize already previewed, including the retained line inside the snap band.
   if(g.kind==='move'&&g.moved&&(g.source.children||g.members))previewGroupMove(p);
@@ -1720,6 +1794,7 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&['KeyZ','KeyY'].includes(e.code)){e.preventDefault();history(e.code==='KeyY'||e.shiftKey)}
 });
 const sample=new URLSearchParams(location.search).get('sample');
+if(sample==='corner-proportions'){model=seed(4);model.active=2;}
 if(sample==='proportions'){model=seed(2);model.active=2;}
 if(sample==='3x3'||sample==='2x2'){
   const size=sample==='2x2'?2:3;
