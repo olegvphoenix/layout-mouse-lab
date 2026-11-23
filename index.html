@@ -23,11 +23,12 @@ html{scrollbar-gutter:stable}
   font:15px/1.45 "Segoe UI",system-ui,sans-serif
 }
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}main{max-width:1840px;margin:auto;padding:clamp(14px,2.1vw,36px)}
-header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{display:flex;align-items:center;gap:10px}header{justify-content:space-between;margin:0 0 20px}h1,h2,h3,p{margin:0}h1{font-size:clamp(21px,2.1vw,33px);letter-spacing:-.04em;font-weight:620}h2{font-size:17px;letter-spacing:-.02em}h3{font-size:14px}button,input,summary{font:inherit}button{color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer;font-size:13px;line-height:1.3}button:hover:enabled{background:var(--control-hover)}button:disabled{opacity:.42;cursor:default}button:focus-visible,summary:focus-visible,input:focus-visible,#wall:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button[aria-pressed=true],button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:650}button[aria-pressed=true]:hover,button.primary:hover:enabled{background:var(--accent-light)}
+header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{display:flex;align-items:center;gap:10px}header{justify-content:space-between;margin:0 0 20px}h1,h2,h3,p{margin:0}h1{font-size:clamp(21px,2.1vw,33px);letter-spacing:-.04em;font-weight:620}h2{font-size:17px;letter-spacing:-.02em}h3{font-size:14px}button,input,summary{font:inherit}button{color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer;font-size:13px;line-height:1.3}button:hover:enabled{background:var(--control-hover)}button:disabled{opacity:.42;cursor:default}button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button[aria-pressed=true],button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:650}button[aria-pressed=true]:hover,button.primary:hover:enabled{background:var(--accent-light)}
 .gridmark{display:grid;grid-template-columns:repeat(2,8px);gap:3px;padding:9px;background:var(--selected-surface);border-radius:7px}.gridmark i{width:8px;height:8px;border:1.5px solid var(--accent);border-radius:1px}.badge{padding:2px 8px;color:var(--muted);border:1px solid var(--line);border-radius:4px;font-size:13px;white-space:nowrap}
 .desk{display:block}.workspace{min-width:0}.history{gap:5px;margin-inline-start:auto}.history button{min-height:32px;padding-inline:9px;white-space:nowrap}.history #reset{margin-inline-start:6px}
 .axes{display:grid;gap:2px}
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:var(--wall);outline:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
+#wall:focus-visible:not([data-pointer-focus]) .tile.selected::before{outline:1px dashed var(--edge-hover);outline-offset:-5px}
 #wall:has(.tile.selected){z-index:1;overflow:clip;overflow-clip-margin:5px}
 .tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
 .name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame,.cell-hole::before{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2;--selection-stroke:2px;--grip-axis:0px}
@@ -424,11 +425,9 @@ function previewInsertion(dir,i){
   const next=editStrips(dir,i);
   const count=column?model.width:model.height;
   const start=Math.max(0,i-.5),size=Math.min(count,i+.5)-start;
-  for(let j=0;j<(column?model.height:model.width);j++){
-    const segment=document.createElement('i');
-    position(segment,column?rect(start,j,size,1):rect(j,start,1,size));
-    band.append(segment);
-  }
+  const stripe=document.createElement('i');
+  position(stripe,column?rect(start,0,size,model.height):rect(0,start,model.width,size));
+  band.append(stripe);
   for(const n of model.nodes.filter(n=>n[dir]<i&&n[dir]+n[extent]>i)){
     const outline=document.createElement('span');outline.className='expands';
     position(outline,n);band.append(outline);
@@ -445,9 +444,7 @@ function startStrip(e,dir,i,remove=false){
   drag.next=previewInsertion(dir,i);drag.message=stripLabel(dir,i);
   const {next,band,rail}=insertionPreview,column=dir==='x',count=column?next.width:next.height;
   renderCells(next);
-  band.querySelectorAll('i').forEach((segment,j)=>{
-    position(segment,column?rect(i,j,1,1):rect(j,i,1,1),next);
-  });
+  position(band.querySelector('i'),column?rect(i,0,1,next.height):rect(0,i,next.width,1),next);
   document.querySelector('.badge').textContent=model.width+' × '+model.height+' → '+next.width+' × '+next.height;
   band.querySelectorAll('.expands').forEach(n=>n.remove());
   for(const n of next.nodes.filter(n=>n[dir]<i&&n[dir]+(column?n.w:n.h)>i)){
@@ -1293,7 +1290,7 @@ wall.addEventListener('pointerdown',e=>{
   const source=edge?current():target;
   const members=model.selection?.includes(source.key)?model.nodes.filter(n=>model.selection.includes(n.key)):null;
   if(!members)choose(source.key);
-  wall.focus({preventScroll:true});wall.setPointerCapture(e.pointerId);
+  wall.dataset.pointerFocus="";wall.focus({preventScroll:true});wall.setPointerCapture(e.pointerId);
   drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,next:null};
 });
 wall.addEventListener('pointermove',e=>{
@@ -1378,6 +1375,8 @@ wall.addEventListener('pointerup',e=>{
   render();say(g.moved?'Геометрия сохранена без изменений.':'Выбрана '+address(g.source)+' · '+nameOf(g.source)+'. Тяните центр, границу или угол.');
 });
 wall.addEventListener('dragstart',e=>e.preventDefault());
+wall.addEventListener('blur',()=>{delete wall.dataset.pointerFocus});
+wall.addEventListener('keydown',()=>{delete wall.dataset.pointerFocus});
 wall.addEventListener('pointerleave',()=>{if(!drag){clearInsertionPreview();highlightEdge('')}});
 wall.addEventListener('pointercancel',()=>cancelGesture('Жест отменён.'));
 wall.addEventListener('lostpointercapture',e=>{if(drag?.id===e.pointerId)cancelGesture('Жест отменён.')});
