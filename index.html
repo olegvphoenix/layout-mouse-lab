@@ -1219,6 +1219,13 @@ function cornerSeams(base,axes,destination,weights){
   }
   return records.length?{...base,seams:[...(base.seams||[]),...records]}:base;
 }
+// A captured strip stays absorbed until there is room to reopen it.
+function stripRemainder(memory,key,raw,previousRaw,stride){
+  const enter=Math.min(16,stride/4),leave=Math.min(enter+4,stride*.4);
+  const held=previousRaw<=1e-8||(previousRaw<=leave+1e-8&&memory.has(key));
+  if(raw<=(held?leave:enter)+1e-8){memory.add(key);return 0}
+  memory.delete(key);return raw;
+}
 function previewCorner(e,p){
   const g=drag,wallBox=wall.getBoundingClientRect();
   if(p.x<0||p.y<0||p.x>model.width||p.y>model.height){
@@ -1226,17 +1233,30 @@ function previewCorner(e,p){
     resizePreview(p);return;
   }
   if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
-  const destination={},steps={};
+  const destination={},rawTarget={},steps={},rawSteps={};
   for(const a of g.axes){
     const horizontal=a.axis==='x',pitch=horizontal?wallBox.width/model.width:wallBox.height/model.height;
     const delta=(horizontal?e.clientX-g.clientX:e.clientY-g.clientY)/pitch;
-    const target=a.border+delta,offset=target-a.line;
-    destination[a.axis]=target;
-    steps[a.axis]=delta===0?0:Math.trunc(offset);
+    const raw=a.border+delta,offset=raw-a.line,sign=g.edge.includes(horizontal?'e':'s')?1:-1;
+    const previous=a.lastRaw??a.border;a.lastRaw=raw;
+    rawTarget[a.axis]=raw;destination[a.axis]=raw;
+    rawSteps[a.axis]=delta===0?0:Math.trunc(offset);
+    if(sign*delta>0&&sign*offset>0){
+      const line=a.line+sign*(Math.floor(sign*offset)+1);
+      const stride=Math.min(1,sign*(line-a.border))*pitch,remaining=sign*(line-raw)*pitch;
+      const gap=stripRemainder(a.snap??=new Set(),line,remaining,sign*(line-previous)*pitch,stride);
+      if(gap!==remaining)destination[a.axis]=line-sign*gap/pitch;
+    }
+    steps[a.axis]=delta===0?0:Math.trunc(destination[a.axis]-a.line);
   }
-  const area=targetBox(g.source,g.edge,steps.x,steps.y);
+  let area=targetBox(g.source,g.edge,steps.x,steps.y);
   if(!g.cornerBase||!equal(g.cornerArea,area)){
     g.cornerBase=equal(area,g.source)?model:reshape(area,g.source);
+    if(!g.cornerBase&&(steps.x!==rawSteps.x||steps.y!==rawSteps.y)){
+      area=targetBox(g.source,g.edge,rawSteps.x,rawSteps.y);
+      Object.assign(destination,rawTarget);
+      g.cornerBase=equal(area,g.source)?model:reshape(area,g.source);
+    }
     if(!g.cornerBase){renderCells();g.outlineKey=null;resizePreview(p);return}
     g.cornerArea=area;g.cornerAxes=cornerAxes(current(g.cornerBase),g.edge,g.cornerBase);
     renderCells(g.cornerBase);renderGridSize();overlay.replaceChildren();g.extended=false;g.outlineKey=null;
@@ -1303,13 +1323,22 @@ function advanceDivider(stage,sign){
 function previewDivider(e){
   const gesture=drag,first=gesture.first,px=(first.axis==='x'?e.clientX:e.clientY)-gesture.start;
   if((!gesture.moved&&Math.abs(px)<4)||gesture.lastPx===px)return;
+  const lastPx=gesture.lastPx??0;
   gesture.moved=true;gesture.lastPx=px;
-  const target=first.border+px/first.scale,dir=Math.sign(px);
-  let g=first;
+  const raw=first.border+px/first.scale,dir=Math.sign(px);
+  let target=raw,g=first;
   while(dir&&g.group){
     const next=advanceDivider(g,dir);
-    if(!next||dir*(target-next.border)<-1e-8)break;
-    g=next;
+    if(!next)break;
+    const boundary=(next.border-first.border)*g.scale;
+    const remaining=dir*(boundary-px),stride=dir*(next.border-g.border)*g.scale;
+    const gap=stripRemainder(g.snap??=new Set(),dir,remaining,dir*(boundary-lastPx),stride);
+    if(gap>1e-8){
+      if(gap!==remaining)target=next.border-dir*gap/g.scale;
+      break;
+    }
+    g.crossed=dir;g=next;
+    if(remaining>0){target=g.border;break}
   }
   if(gesture.stage!==g){
     gesture.stage.elements=null;gesture.stage.live=null;gesture.stage.absorbMarkers=[];
@@ -1319,11 +1348,12 @@ function previewDivider(e){
     const b=visualRect(current(g.base),g.base);
     paintDividerLine(g.axis,b,g.border,g.base);return;
   }
-  const boxes=visibleBoxes(g.base),travel=px-(g.border-first.border)*g.scale;
+  const boxes=visibleBoxes(g.base),travel=target===g.border?0:px-(g.border-first.border)*g.scale;
   const sign=Math.sign(travel),dest=clamp(target,...g.limits);
   const shrinking=sign>0?g.group.after:g.group.before;
   const remaining=Math.min(...shrinking.map(n=>boxes.get(n)[g.group.span]*g.scale))-Math.abs(travel);
-  const fixed=sign&&(g===first||Math.abs(travel)>=4)&&remaining<(g.fixed===sign?82:80)?sign:0;
+  if(g.crossed!==sign||remaining>=82)g.crossed=0;
+  const fixed=sign&&!g.crossed&&(g===first||Math.abs(travel)>=4)&&remaining<(g.fixed===sign?82:80)?sign:0;
   if(g.fixed!==fixed){
     g.fixed=fixed;g.next=fixed?advanceDivider(g,fixed)?.base:null;
     overlay.replaceChildren();g.absorbMarkers=[];
@@ -1861,6 +1891,7 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&['KeyZ','KeyY'].includes(e.code)){e.preventDefault();history(e.code==='KeyY'||e.shiftKey)}
 });
 const sample=new URLSearchParams(location.search).get('sample');
+if(sample==='narrow-strip'){model=seed(4);model.active=5;}
 if(sample==='absorb-down'){
   model=seed(4);
   model=reshape(rect(0,1,2,1),model.nodes[4],model);
