@@ -156,6 +156,10 @@ header{flex-wrap:wrap;gap:10px 20px}
 .cell-lift .strip-hole{z-index:4}
 .cell-cargo{position:absolute;z-index:8;pointer-events:none;transform-origin:0 0}
 .cell-cargo .cargo-tile{outline:2px solid var(--accent-light);outline-offset:-2px;box-shadow:0 5px 16px #000c;background:var(--wall)}
+.tile.resize-live{z-index:7;pointer-events:none}
+.tile.resize-live .frame{opacity:.68}
+.tile.resize-live::after{content:"";position:absolute;inset:1px;border:2px solid var(--accent);pointer-events:none}
+.tile.resize-live .frame::before{display:none}
 .outline.move-target{border:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 17%,transparent)}
 #wall:has(.cell-lift) > .overlay{z-index:9}
 .axes:has(.strip-lift) .strip-grip{cursor:grabbing}
@@ -1120,7 +1124,8 @@ function targetBox(n,e,dx,dy,state=model){
   if(e.includes('s'))b=clamp(b+dy,t+1,state.height);
   return rect(l,t,r-l,b-t);
 }
-const step = v => Math.sign(v)*Math.floor(Math.abs(v)+.35);
+// Halfway between two grid lines, keep the line nearer the starting edge.
+const step = distance => Math.sign(distance)*Math.max(0,Math.ceil(Math.abs(distance)-.5-1e-9));
 function previewGridExtension(p,sx,sy){
   const {width,height}=model,{edge}=drag;
   const wallBounds=wall.getBoundingClientRect();
@@ -1171,6 +1176,10 @@ function resizePreview(p){
   $('return-info').textContent='';
   const sx=step(dx),sy=step(dy);
   if(previewGridExtension(p,sx,sy))return;
+  const liveBox=targetBox(source,edge,dx,dy);
+  const liveTile=tiles.querySelector('.tile.selected');
+  liveTile.classList.toggle('resize-live',!equal(liveBox,source));
+  position(liveTile,liveBox);
   const box=targetBox(source,edge,sx,sy);
   if(!equal(box,source)){
     const next=reshape(box,source);drag.next=next;
@@ -1201,6 +1210,7 @@ function resizePreview(p){
     say(drag.message+' Отпустите для применения.');return;
   }
   overlay.replaceChildren();drag.next=null;
+  if(!equal(liveBox,source))placePreview(source,'pending');
   const earlyBox=targetBox(source,edge,Math.sign(dx),Math.sign(dy));
   const earlyReturn=edge.length===1 && contains(source,earlyBox) && !equal(source,earlyBox);
   if(earlyReturn){
@@ -1279,7 +1289,23 @@ wall.addEventListener('pointerup',e=>{
   drag=null;
   if(wall.hasPointerCapture(e.pointerId))wall.releasePointerCapture(e.pointerId);
   overlay.replaceChildren();
-  if(g.kind==='resize'&&g.moved&&g.next){remember(g.next,g.message);return}
+  if(g.kind==='resize'&&g.moved){
+    const live=tiles.querySelector('.resize-live');
+    const from=live?.getBoundingClientRect();
+    if(g.next)remember(g.next,g.message);
+    else{render();say('Исходные границы сохранены.')}
+    if(from&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      const tile=tiles.querySelector('.tile.selected'),to=tile.getBoundingClientRect();
+      // Settle the picture while the handles are already available on the grid line.
+      const transform='translate('+(from.x-to.x)+'px,'+(from.y-to.y)+'px) scale('+
+        (from.width/to.width)+','+(from.height/to.height)+')';
+      tile.querySelector('.frame').animate([
+        {transformOrigin:'top left',transform},
+        {transformOrigin:'top left',transform:'none'}
+      ],{duration:120,easing:'ease-out'});
+    }
+    return;
+  }
   if(g.kind==='move'&&g.moved&&(g.source.children||g.members)){
     if(g.next){remember(g.next,g.message);landCargo(g.visual.cargo,g.visual.w,g.visual.h,g.landing)}
     else{render();say('Область осталась на месте.')}
