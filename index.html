@@ -16,7 +16,7 @@ html{scrollbar-gutter:stable}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}main{max-width:1840px;margin:auto;padding:clamp(14px,2.1vw,36px)}
 header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{display:flex;align-items:center;gap:10px}header{justify-content:space-between;margin:0 0 20px}h1,h2,h3,p{margin:0}h1{font-size:clamp(21px,2.1vw,33px);letter-spacing:-.04em;font-weight:620}h2{font-size:17px;letter-spacing:-.02em}h3{font-size:14px}button,input,summary{font:inherit}button{color:var(--text);background:#263137;border:1px solid #405057;border-radius:6px;padding:7px 11px;cursor:pointer;font-size:13px;line-height:1.3}button:hover:enabled{background:#34454b}button:disabled{opacity:.42;cursor:default}button:focus-visible,summary:focus-visible,input:focus-visible,#wall:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button[aria-pressed=true],button.primary{background:var(--accent);color:#102a22;border-color:var(--accent);font-weight:650}button[aria-pressed=true]:hover,button.primary:hover:enabled{background:#a4efd9}
 .gridmark{display:grid;grid-template-columns:repeat(2,8px);gap:3px;padding:9px;background:#193c33;border-radius:7px}.gridmark i{width:8px;height:8px;border:1.5px solid var(--accent);border-radius:1px}.badge{padding:2px 8px;color:var(--muted);border:1px solid var(--line);border-radius:4px;font-size:13px;white-space:nowrap}
-.desk{display:block}.workspace{min-width:0}.toolrow{justify-content:space-between;flex-wrap:wrap;gap:8px;min-height:46px;padding-bottom:9px}.modegroup,.history{gap:5px;flex-wrap:wrap}.history button{padding-inline:9px}.toolrow button{min-height:32px}.modegroup [hidden]{display:none}
+.desk{display:block}.workspace{min-width:0}.toolrow{justify-content:flex-end;flex-wrap:wrap;gap:8px;min-height:46px;padding-bottom:9px}.history{gap:5px;flex-wrap:wrap}.history button{padding-inline:9px}.toolrow button{min-height:32px}
 .axes{display:grid;gap:2px}
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:#080d0f;outline:1px solid #495960;overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
 .tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:#243037}.scene{position:absolute;inset:0;background-size:cover;background-position:center;filter:saturate(.56) brightness(.8)}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(5,12,15,.85),transparent 63%);pointer-events:none}
@@ -159,7 +159,6 @@ header{flex-wrap:wrap;gap:10px 20px}
 <button id="reset">Сбросить</button></header>
 <div class="desk"><div class="workspace">
 <div class="toolrow" id="toolbar" aria-label="Инструменты раскладки">
-<div class="modegroup"><button id="pointer" aria-pressed="true">Указатель</button></div>
 <div class="history"><button id="undo" disabled aria-keyshortcuts="Control+Z">↶ Отменить</button><button id="redo" disabled aria-keyshortcuts="Control+Shift+Z">↷ Повторить</button></div></div>
 <div class="layout-surface"><div class="axes">
 <div class="insert-rail columns" id="insert-columns"></div><div class="insert-rail rows" id="insert-rows"></div>
@@ -1399,7 +1398,6 @@ wall.addEventListener('pointerleave',()=>{if(!drag){clearInsertionPreview();over
 wall.addEventListener('pointercancel',()=>cancelGesture('Жест отменён.'));
 wall.addEventListener('lostpointercapture',e=>{if(drag?.id===e.pointerId)cancelGesture('Жест отменён.')});
 window.addEventListener('blur',()=>{if(drag)cancelGesture('Жест отменён.');else clearInsertionPreview()});
-$('pointer').onclick=()=>{leaveGesture();render();say(defaultHint)};
 $('undo').onclick=()=>history(false);$('redo').onclick=()=>history(true);
 $('reset').onclick=()=>{leaveGesture();remember(seed(),'Исходная сетка 8 × 8 восстановлена. Сброс можно отменить.')};
 for(const button of document.querySelectorAll('.grid-presets button')){
