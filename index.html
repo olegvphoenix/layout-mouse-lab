@@ -1220,13 +1220,13 @@ function cornerSeams(base,axes,destination,weights){
   return records.length?{...base,seams:[...(base.seams||[]),...records]}:base;
 }
 // A captured strip stays absorbed until there is room to reopen it.
-function stripRemainder(memory,key,raw,previousRaw,stride){
-  const enter=Math.min(16,stride/4),leave=Math.min(enter+4,stride*.4);
+function stripRemainder(memory,key,raw,previousRaw,stride,selected=false){
+  const enter=Math.min(selected?32:16,stride/4),leave=selected?enter+4:Math.min(enter+4,stride*.4);
   const held=previousRaw<=1e-8||(previousRaw<=leave+1e-8&&memory.has(key));
   if(raw<=(held?leave:enter)+1e-8){memory.add(key);return 0}
   memory.delete(key);return raw;
 }
-function previewCorner(e,p){
+function previewCorner(e,p,axes){
   const g=drag,wallBox=wall.getBoundingClientRect();
   if(p.x<0||p.y<0||p.x>model.width||p.y>model.height){
     if(g.cornerBase){renderCells();g.cornerBase=null}
@@ -1234,7 +1234,7 @@ function previewCorner(e,p){
   }
   if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
   const destination={},rawTarget={},steps={},rawSteps={};
-  for(const a of g.axes){
+  for(const a of axes){
     const horizontal=a.axis==='x',pitch=horizontal?wallBox.width/model.width:wallBox.height/model.height;
     const delta=(horizontal?e.clientX-g.clientX:e.clientY-g.clientY)/pitch;
     const raw=a.border+delta,offset=raw-a.line,sign=g.edge.includes(horizontal?'e':'s')?1:-1;
@@ -1262,7 +1262,7 @@ function previewCorner(e,p){
     renderCells(g.cornerBase);renderGridSize();overlay.replaceChildren();g.extended=false;g.outlineKey=null;
     g.drawn=visibleBoxes(g.cornerBase);
   }
-  const weights=cornerContinuation(g.cornerAxes,g.axes,destination,g.source,g.edge);
+  const weights=cornerContinuation(g.cornerAxes,axes,destination,g.source,g.edge);
   const candidate=cornerSeams(g.cornerBase,g.cornerAxes,destination,weights);
   const boxes=visibleBoxes(candidate),size={width:model.width,height:model.height};
   candidate.nodes.forEach((n,i)=>{
@@ -1271,6 +1271,41 @@ function previewCorner(e,p){
   });
   g.drawn=boxes;g.next=candidate===model?null:candidate;
   g.message='Пропорции ячеек изменены.';g.redraw=null;
+}
+function previewCellResize(e,p){
+  const g=drag,wallBox=wall.getBoundingClientRect();
+  let collapsed=null;
+  for(const a of g.collapseAxes||[]){
+    const horizontal=a.axis==='x',sign=g.edge.includes(horizontal?'e':'s')?1:-1;
+    const delta=horizontal?e.clientX-g.clientX:e.clientY-g.clientY;
+    const scale=horizontal?wallBox.width/model.width:wallBox.height/model.height;
+    const thickness=visualRect(g.source)[a.span]*scale;
+    const raw=thickness+sign*delta,previous=a.previousThickness??thickness;
+    a.previousThickness=raw;
+    if(sign*delta>=0||p.x<0||p.y<0||p.x>model.width||p.y>model.height)continue;
+    if(stripRemainder(a.capture??=new Set(),a.axis,raw,previous,scale,true)>0)continue;
+    if(a.collapse===undefined){
+      const seam=dividerStage(model,{...a,scale,at:g.source[a.cross],tangent:a.crossBorder+(a.farCross?-1e-5:1e-5),
+        edge:horizontal?(sign>0?'e':'w'):(sign>0?'s':'n')});
+      a.collapse=seam.group?fixedDividerLayout(seam,-sign):null;
+    }
+    if(a.collapse){collapsed=a.collapse;break}
+  }
+  if(collapsed){
+    if(g.next!==collapsed){
+      if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
+      g.extended=false;renderCells(collapsed);renderGridSize();overlay.replaceChildren();
+    }
+    g.next=collapsed;g.collapsed=true;g.message='Полоса поглощена соседями.';return;
+  }
+  if(g.collapsed){g.collapsed=false;g.cornerBase=null;g.outlineKey=null;g.next=null;renderCells()}
+  const parallel=g.wallAxis&&Math.abs(g.wallAxis.axis==='x'?e.clientX-g.clientX:e.clientY-g.clientY)<=4;
+  const fractional=g.axes&&(!g.wallAxis||parallel);
+  if(g.fractional!==fractional){
+    if(g.fractional!==undefined){g.cornerBase=null;g.outlineKey=null;renderCells();overlay.replaceChildren()}
+    g.fractional=fractional;
+  }
+  if(fractional)previewCorner(e,p,g.axes);else resizePreview(p);
 }
 function dividerStage(base,seam,border){
   const boxes=visibleBoxes(base),group=seamComponent(base,boxes,seam.axis,seam.line,seam.at);
@@ -1289,6 +1324,23 @@ function beginDivider(e,seam){
   drag={kind:'divider',id:e.pointerId,first,stage:first,start:seam.axis==='x'?e.clientX:e.clientY};
   wall.setPointerCapture(e.pointerId);return true;
 }
+// Split a disappearing band between the rectangles that actually share its seam.
+function distributeBand(base,band,sides,receiver,axis,sign){
+  const additions=new Map();
+  let remaining=childrenOf(band);
+  for(const side of sides){
+    const area=targetBox(side,axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n'),
+      axis==='x'?sign:0,axis==='y'?sign:0,base);
+    const taken=[],rest=[];
+    for(const part of remaining)collectPieces(part,area,taken,rest);
+    const pieces=[...childrenOf(side),...taken],cover=rectangular(pieces);
+    if(!cover||!equal(area,cover))return null;
+    additions.set(side,combined(pieces,area,side.key));
+    remaining=rest;
+  }
+  if(remaining.length)return null;
+  return {...base,active:receiver.key,nodes:base.nodes.filter(n=>n!==band).map(n=>additions.get(n)||n)};
+}
 function fixedDividerLayout(g,sign,click=false){
   const state=g.base,sides=sign>0?g.group.before:g.group.after,boxes=visibleBoxes(state);
   const receiver=click?current(state):sides.find(n=>{
@@ -1303,6 +1355,10 @@ function fixedDividerLayout(g,sign,click=false){
   if(equal(receiver,area))return null;
   const origin=state.origin||{x:0,y:0};
   const base={...state,seams:[...(state.seams||[]),{axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:0}]};
+  const donors=sign>0?g.group.after:g.group.before;
+  if(!click&&sides.length>1&&donors.length===1&&donors[0][extent]===1){
+    return distributeBand(base,donors[0],sides,receiver,g.axis,sign);
+  }
   return reshape(area,receiver,base);
 }
 function advanceDivider(stage,sign){
@@ -1326,23 +1382,32 @@ function previewDivider(e){
   const lastPx=gesture.lastPx??0;
   gesture.moved=true;gesture.lastPx=px;
   const raw=first.border+px/first.scale,dir=Math.sign(px);
-  let target=raw,g=first;
+  let target=raw,g=first,finishedBand=false;
   while(dir&&g.group){
     const next=advanceDivider(g,dir);
     if(!next)break;
     const boundary=(next.border-first.border)*g.scale;
     const remaining=dir*(boundary-px),stride=dir*(next.border-g.border)*g.scale;
-    const gap=stripRemainder(g.snap??=new Set(),dir,remaining,dir*(boundary-lastPx),stride);
+    const source=current(g.base),shrinking=dir>0?g.group.after:g.group.before;
+    const self=g===first&&source[g.group.span]===1&&shrinking.includes(source);
+    const thickness=self?visibleBoxes(g.base).get(source)[g.group.span]*g.scale:0;
+    const gap=self
+      ?stripRemainder(g.snap??=new Set(),dir,thickness-dir*px,thickness-dir*lastPx,g.scale,true)
+      :stripRemainder(g.snap??=new Set(),dir,remaining,dir*(boundary-lastPx),stride);
     if(gap>1e-8){
-      if(gap!==remaining)target=next.border-dir*gap/g.scale;
+      if(!self&&gap!==remaining)target=next.border-dir*gap/g.scale;
       break;
     }
+    finishedBand=self&&!next.base.nodes.some(n=>n.key===source.key);
     g.crossed=dir;g=next;
-    if(remaining>0){target=g.border;break}
+    if(finishedBand||remaining>0){target=g.border;break}
   }
   if(gesture.stage!==g){
     gesture.stage.elements=null;gesture.stage.live=null;gesture.stage.absorbMarkers=[];
     renderCells(g.base);overlay.replaceChildren();showDividerStage(g);gesture.stage=g;
+  }
+  if(finishedBand){
+    paintDividerLine(g.axis,visualRect(current(first.base),first.base),g.border,g.base);return;
   }
   if(!g.group){
     const b=visualRect(current(g.base),g.base);
@@ -1358,8 +1423,12 @@ function previewDivider(e){
     g.fixed=fixed;g.next=fixed?advanceDivider(g,fixed)?.base:null;
     overlay.replaceChildren();g.absorbMarkers=[];
     if(g.next){
-      const border=document.createElement('div');
-      border.className='outline pending divider-result';position(border,current(g.next),g.next);overlay.append(border);
+      for(const n of sign>0?g.group.before:g.group.after){
+        const after=g.next.nodes.find(cell=>cell.key===n.key);
+        if(!after||equal(n,after))continue;
+        const border=document.createElement('div');
+        border.className='outline pending divider-result';position(border,after,g.next);overlay.append(border);
+      }
       for(const n of shrinking){
         const after=g.next.nodes.find(cell=>cell.key===n.key);
         if(after&&equal(after,n))continue;
@@ -1759,7 +1828,9 @@ wall.addEventListener('pointerdown',e=>{
   drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,next:null};
   if(edge.length===2&&!e.altKey){
     const axes=cornerAxes(source,edge,model);
-    if(axes.every(a=>a.line>0&&a.line<(a.axis==='x'?model.width:model.height)))drag.axes=axes;
+    const internal=axes.filter(a=>a.line>0&&a.line<(a.axis==='x'?model.width:model.height));
+    drag.collapseAxes=internal.filter(a=>source[a.span]===1);
+    if(internal.length){drag.axes=axes;drag.wallAxis=axes.find(a=>!internal.includes(a))}
   }
 });
 wall.addEventListener('pointermove',e=>{
@@ -1783,7 +1854,7 @@ wall.addEventListener('pointermove',e=>{
   if(drag.kind==='divider'){previewDivider(e);return}
   if(Math.hypot(e.clientX-drag.clientX,e.clientY-drag.clientY)>=4)drag.moved=true;
   if(!drag.moved)return;
-  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);if(drag.axes)previewCorner(e,p);else resizePreview(p);return}
+  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);previewCellResize(e,p);return}
   carryCells(drag,e);
   if(drag.source.children||drag.members){wall.style.cursor='grabbing';previewGroupMove(p);return}
   const target=hit(p),source=drag.source;
@@ -1825,7 +1896,7 @@ wall.addEventListener('pointerup',e=>{
     overlay.replaceChildren();return;
   }
   const g=drag,p=point(e),outside=p.x<0||p.y<0||p.x>model.width||p.y>model.height;
-  if(g.axes&&g.moved)previewCorner(e,p);
+  if(g.collapseAxes&&g.moved)previewCellResize(e,p);
   if(outside&&g.kind!=='resize'){cancelGesture('Действие отменено за пределами раскладки.');return}
   // Commit the resize already previewed, including the retained line inside the snap band.
   if(g.kind==='move'&&g.moved&&(g.source.children||g.members))previewGroupMove(p);
@@ -1891,6 +1962,16 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&['KeyZ','KeyY'].includes(e.code)){e.preventDefault();history(e.code==='KeyY'||e.shiftKey)}
 });
 const sample=new URLSearchParams(location.search).get('sample');
+if(sample==='exit-strip'||sample==='exit-column'){
+  model=seed(4);
+  model.feeds[10]=null;
+  const column=sample==='exit-column';
+  const regions=column?[[10,2,2,2,1],[15,2,3,2,1],[9,1,2,1,2]]:
+    [[10,2,2,1,2],[15,3,2,1,2],[6,2,1,2,1]];
+  for(const [key,x,y,w,h] of regions){
+    model=reshape(rect(x,y,w,h),model.nodes.find(n=>n.key===key),model);
+  }
+}
 if(sample==='narrow-strip'){model=seed(4);model.active=5;}
 if(sample==='absorb-down'){
   model=seed(4);
