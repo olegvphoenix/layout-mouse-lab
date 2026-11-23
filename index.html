@@ -30,7 +30,7 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:var(--wall);outline:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
 #wall:focus-visible:not([data-pointer-focus]) .tile.selected::before{outline:1px dashed var(--edge-hover);outline-offset:-5px}
 #wall:has(.tile.selected){z-index:1;overflow:clip;overflow-clip-margin:5px}
-.tile{position:absolute;color:white}.tile>.frame{position:absolute;inset:1.5px;width:auto;height:auto}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
+.tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
 .name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame,.cell-hole::before{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2;--selection-stroke:2px;--grip-axis:0px}
 .tile.selected::before{content:"";position:absolute;inset:calc(var(--selection-stroke) / -2);box-shadow:inset 0 0 0 1px var(--wall);z-index:2;border:var(--selection-stroke) solid var(--accent);pointer-events:none}
 .selected[data-hover-edge*=n]::before{top:-2px;border-top:4px solid var(--edge-hover)}
@@ -198,11 +198,6 @@ header{flex-wrap:wrap;gap:10px 20px}
 .outline.move-target{border:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 17%,transparent)}
 #wall:has(.cell-lift) > .overlay{z-index:9}
 .axes:has(.strip-lift) .strip-grip{cursor:grabbing}
-.divider-exit{position:absolute;z-index:5;pointer-events:none}
-.outline.pending.divider-result{background:transparent}
-.shared-divider{position:absolute;pointer-events:none;background:var(--edge-hover);z-index:2}
-.shared-divider.vertical{width:4px;transform:translateX(-50%);cursor:col-resize}
-.shared-divider.horizontal{height:4px;transform:translateY(-50%);cursor:row-resize}
 </style>
 <main>
 <header><div class="heading"><span class="gridmark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><h1>Редактор раскладки</h1><span class="badge">8 × 8</span></div>
@@ -262,7 +257,6 @@ function seed(size=8) {
   const cells=size*size;
   return {width:size,height:size,nodes:Array.from({length:cells},(_,key)=>({...slot(key,size),key})),feeds:Array.from({length:cells},(_,i)=>feedAt(i)),active:0};
 }
-const gridSideLimit=new URLSearchParams(location.search).get('profile')==='webclient'?16:Infinity;
 let model=seed(), past=[], future=[], drag=null;
 const current = (s=model) => s.nodes.find(n=>n.key===s.active);
 const cameraWord = (v,forms) => forms[v%100>=11 && v%100<=14?2:v%10===1?0:v%10>=2 && v%10<=4?1:2];
@@ -397,7 +391,6 @@ function editStrips(direction,index,removeCount=0){
     for(let y=n.y;y<bottom(n);y++)for(let x=n.x;x<right(n);x++)covered.add(y*view.w+x);
   }
   next.feeds.forEach((_,key)=>{if(!covered.has(key))next.nodes.push({...slot(key,view.w),key})});
-  transformSeams(next,direction,i=>removed(i,index)?null:shift(i,index));
   const fallback=slot(model.active,old.width);
   fallback[direction]=clamp(shift(fallback[direction],index),0,view[extent]-1);
   const owner=key=>next.nodes.find(n=>contains(n,slot(key,view.w))).key;
@@ -550,7 +543,6 @@ function reorderStrips(dir,order){
     }
   }
   if(model.hiddenGroups)next.hiddenGroups=model.hiddenGroups.map(n=>moveNode(n,true));
-  transformSeams(next,dir,map);
   return {next};
 }
 const stripHint='Щёлкните номера строк слева или буквы столбцов сверху, затем потяните любой выбранный заголовок. Shift выделяет диапазон.';
@@ -680,7 +672,6 @@ function landCargo(cargo,w,h,area){
   cargo.style.transformOrigin='0 0';
   const layer=document.createElement('div');layer.className='landing-layer';
   layer.setAttribute('aria-hidden','true');layer.append(cargo);wall.append(layer);
-  area=visualRect(area);
   const end='translate('+box.width*area.x/model.width+'px,'+box.height*area.y/model.height+'px) scale('+box.width*area.w/model.width/w+','+box.height*area.h/model.height/h+')';
   const flight=cargo.animate([{transform:start,opacity:1},{transform:end,opacity:.15}],{duration:190,easing:'cubic-bezier(.2,.8,.3,1)',fill:'both'});
   flight.onfinish=flight.oncancel=()=>layer.remove();
@@ -712,16 +703,15 @@ function renderInsertMarks(){
       header.style[dir==='x'?'left':'top']=100*(i+.5)/count+'%';
       group.append(header);header.append(stripGrip(dir,i,count));
       if(count>1)mark(i,true,header);
-      if(count<gridSideLimit)mark(i,false,group);
+      mark(i,false,group);
     }
-    if(count<gridSideLimit)mark(count,false,rail.lastElementChild);
+    mark(count,false,rail.lastElementChild);
   }
 }
 function innerStrip(p){
   const n=hit(p);
   let best=null,dist=3;
   for(const [dir,extent,limit,pixels] of [['x','w',model.width,wall.clientWidth],['y','h',model.height,wall.clientHeight]]){
-    if(limit>=gridSideLimit)continue;
     for(const side of [0,1]){
       const index=n[dir]+side*n[extent],gap=Math.abs(p[dir]-n[dir]-side*n[extent])*pixels/limit;
       if(index>0&&index<limit&&gap<dist){best={dir,index};dist=gap}
@@ -822,9 +812,7 @@ function outwardSteps(g,side,distance,origin,pitch){
   if(Math.abs(value-arm.steps)>=.5+pad){
     arm.steps=Math.max(0,Math.round(value-Math.sign(value-arm.steps)*pad));
   }
-  const available=Math.max(0,gridSideLimit-(horizontal?model.width:model.height));
-  arm.steps=Math.min(available,arm.steps);
-  const holding=arm.steps<available&&!arm.retreating&&(ring?arm.steps>0:distance>=Math.min(14,Math.max(first,room-5)));
+  const holding=!arm.retreating&&(ring?arm.steps>0:distance>=Math.min(14,Math.max(first,room-5)));
   if(!holding){clearTimeout(arm.timer);arm.timer=null}
   if(holding&&arm.timer===null){
     arm.timer=setTimeout(()=>{
@@ -846,8 +834,7 @@ function perimeterBox(edge,dx,dy,previous,g=null){
       const growth=outwardSteps(g,side,-d,origin,pitch);
       if(d<0)return -growth;
     }
-    const count=side==='e'||side==='w'?model.width:model.height;
-    return Math.max(-Math.max(0,gridSideLimit-count),perimeterSteps(d,pitch,prior));
+    return perimeterSteps(d,pitch,prior);
   }
   return resizeBounds(model,
     steps('w',dx,w,previous.x),steps('n',dy,h,previous.y),
@@ -971,7 +958,7 @@ function moveGroup(members,dx,dy){
 }
 function areaAddress(r){return address(r)+'–'+address(rect(right(r)-1,bottom(r)-1,1,1))}
 function liftCells(g){
-  const members=g.members||[g.source],area=members.map(n=>visualRect(n)).reduce(bounds);
+  const members=g.members||[g.source],area=members.reduce(bounds);
   const box=wall.getBoundingClientRect(),unitX=box.width/model.width,unitY=box.height/model.height;
   const w=area.w*unitX,h=area.h*unitY;
   const layer=document.createElement('div'),cargo=document.createElement('div');
@@ -981,7 +968,7 @@ function liftCells(g){
     const original=tiles.querySelector('[data-key="'+n.key+'"]');
     const hole=document.createElement('div');hole.className='cell-hole';position(hole,n);layer.append(hole);
     const tile=document.createElement('div');tile.className='cargo-tile'+(original.classList.contains('empty')?' empty':'');
-    const b=visualRect(n);position(tile,rect(b.x-area.x,b.y-area.y,b.w,b.h),{width:area.w,height:area.h});
+    position(tile,rect(n.x-area.x,n.y-area.y,n.w,n.h),{width:area.w,height:area.h});
     tile.append(original.querySelector('.frame').cloneNode(true));cargo.append(tile);
   });
   layer.append(cargo);wall.append(layer);return {layer,cargo,w,h,area};
@@ -1064,471 +1051,7 @@ function reshape(box, source,base=model){
   next.nodes=[...keep,selected];next.active=selected.key;
   return next;
 }
-// Fractional seams deform visible rectangles while addresses and hidden parts stay on the grid.
-const seamCache=new WeakMap();
-function seamComponent(state,boxes,axis,line,at){
-  const span=axis==='x'?'w':'h',cross=axis==='x'?'y':'x',length=cross==='x'?'w':'h';
-  const before=[],after=[];
-  for(const n of state.nodes){
-    if(n[axis]+n[span]===line)before.push(n);
-    if(n[axis]===line)after.push(n);
-  }
-  const seed=before.find(n=>n[cross]<=at&&at<n[cross]+n[length]);
-  if(!seed||!after.length)return null;
-  const border=boxes.get(seed)[axis]+boxes.get(seed)[span];
-  const left=new Set([seed]),rightSide=new Set(),queue=[seed];
-  while(queue.length){
-    const n=queue.pop(),box=boxes.get(n),fromLeft=left.has(n);
-    const seen=fromLeft?rightSide:left;
-    for(const m of fromLeft?after:before){
-      if(seen.has(m))continue;
-      const other=boxes.get(m),end=other[axis]+(fromLeft?0:other[span]);
-      if(Math.abs(border-end)>1e-7)continue;
-      if(Math.min(box[cross]+box[length],other[cross]+other[length])-Math.max(box[cross],other[cross])<=1e-7)continue;
-      seen.add(m);queue.push(m);
-    }
-  }
-  if(!rightSide.size)return null;
-  return {axis,span,cross,length,border,before:[...left],after:[...rightSide]};
-}
-function seamLimits(group,boxes,minimum){
-  const {axis,span}=group;
-  return [Math.max(...group.before.map(n=>{const b=boxes.get(n);return b[axis]+Math.min(minimum,b[span])})),
-    Math.min(...group.after.map(n=>{const b=boxes.get(n);return b[axis]+b[span]-Math.min(minimum,b[span])}))];
-}
-// Project the draft onto the two normalized offsets supported by layout cells.
-function platformShape(state,boxes){
-  const cells=new Map(),owners=new Map();
-  for(const n of state.nodes){
-    const b=boxes.get(n);
-    cells.set(n,{right_spring:Math.fround((right(b)-right(n))/state.width),
-      bottom_spring:Math.fround((bottom(b)-bottom(n))/state.height)});
-    for(let y=n.y;y<bottom(n);y++)for(let x=n.x;x<right(n);x++)owners.set(y*state.width+x,n);
-  }
-  const decoded=new Map();
-  for(const n of state.nodes){
-    const own=cells.get(n),i=n.y*state.width+n.x;
-    const left=n.x?cells.get(owners.get(i-1)):null,top=n.y?cells.get(owners.get(i-state.width)):null;
-    const x=n.x+(left?.right_spring??0)*state.width,y=n.y+(top?.bottom_spring??0)*state.height;
-    const b=rect(x,y,right(n)+own.right_spring*state.width-x,bottom(n)+own.bottom_spring*state.height-y);
-    const expected=boxes.get(n);
-    if(['x','y','w','h'].some(key=>Math.abs(b[key]-expected[key])>1e-6*Math.max(state.width,state.height)))return null;
-    decoded.set(n,b);
-  }
-  return decoded;
-}
-function visibleBoxes(state){
-  if(seamCache.has(state))return seamCache.get(state);
-  const boxes=new Map(state.nodes.map(n=>[n,rect(n.x,n.y,n.w,n.h)])),origin=state.origin||{x:0,y:0};
-  for(const record of state.seams||[]){
-    const {axis,delta}=record,cross=axis==='x'?'y':'x',line=record.line-origin[axis];
-    const group=seamComponent(state,boxes,axis,line,record.at-origin[cross]);
-    if(!group)continue;
-    const [lo,hi]=seamLimits(group,boxes,1e-5),dest=clamp(line+delta,lo,hi);
-    const touched=group.before.concat(group.after);
-    const previous=touched.map(n=>({...boxes.get(n)}));
-    for(const n of group.before){const b=boxes.get(n);b[group.span]=dest-b[axis]}
-    for(const n of group.after){const b=boxes.get(n);b[group.span]+=b[axis]-dest;b[axis]=dest}
-    if(!platformShape(state,boxes))touched.forEach((n,i)=>boxes.set(n,previous[i]));
-  }
-  const result=state.seams?.length?platformShape(state,boxes):boxes;
-  seamCache.set(state,result);return result;
-}
-function visualRect(area,state=model,pieces=null){
-  if(!state.seams?.length||!state.nodes)return area;
-  const boxes=visibleBoxes(state);
-  if(boxes.has(area))return boxes.get(area);
-  // Map each covered piece through its owning tile, including a fractional live preview.
-  let result=null;
-  for(const n of state.nodes){
-    if(!overlaps(area,n))continue;
-    const b=boxes.get(n),x=Math.max(area.x,n.x),y=Math.max(area.y,n.y);
-    const part=rect(b.x+(x-n.x)*b.w/n.w,b.y+(y-n.y)*b.h/n.h,
-      (Math.min(right(area),right(n))-x)*b.w/n.w,(Math.min(bottom(area),bottom(n))-y)*b.h/n.h);
-    pieces?.push(part);
-    result=result?bounds(result,part):part;
-  }
-  return result||area;
-}
-function dividerAt(e,edge){
-  if(!edge||edge.length!==1||model.selection)return null;
-  const n=current(),axis='ew'.includes(edge)?'x':'y',span=axis==='x'?'w':'h',cross=axis==='x'?'y':'x';
-  const line=n[axis]+('es'.includes(edge)?n[span]:0);
-  if(line===0||line===(axis==='x'?model.width:model.height))return null;
-  const b=visualRect(n),wallBox=wall.getBoundingClientRect();
-  const scaleX=wallBox.width/model.width,scaleY=wallBox.height/model.height;
-  const px=e.clientX-wallBox.left,py=e.clientY-wallBox.top;
-  const normal=axis==='x'?px:py,tangent=axis==='x'?py:px;
-  const scale=axis==='x'?scaleX:scaleY,tangentScale=axis==='x'?scaleY:scaleX;
-  const atCenter=Math.abs(tangent-(b[cross]+b[axis==='x'?'h':'w']/2)*tangentScale)<=16;
-  const border=(b[axis]+('es'.includes(edge)?b[span]:0))*scale;
-  if(e.altKey||(!atCenter&&Math.abs(normal-border)>6))return null;
-  return {axis,cross,line,edge,at:n[cross],scale,onGrip:atCenter&&Math.abs(normal-border)<=6,tangent:tangent/tangentScale};
-}
-function cornerAxes(n,edge,state){
-  const box=visibleBoxes(state).get(n);
-  return ['x','y'].map(axis=>{
-    const vertical=axis==='x',cross=vertical?'y':'x',span=vertical?'w':'h';
-    const far=edge.includes(vertical?'e':'s'),farCross=edge.includes(vertical?'s':'e');
-    return {axis,cross,span,line:n[axis]+(far?n[span]:0),border:box[axis]+(far?box[span]:0),
-      vertex:n[cross]+(farCross?n[vertical?'h':'w']:0),
-      crossBorder:box[cross]+(farCross?box[vertical?'h':'w']:0),farCross};
-  });
-}
-// At a whole strip the corner changes neighbours. Bring the outer continuation
-// of the old seam home, then pick up the new continuation from its own position.
-function cornerContinuation(axes,start,destination,source,edge){
-  const weights=[1,1];
-  axes.forEach((a,i)=>{
-    const remaining=destination[a.axis]-a.line;
-    const distance=Math.min(1,Math.abs(remaining));
-    const grows=remaining*(edge.includes(a.axis==='x'?'e':'s')?1:-1)>0;
-    if(distance>.5&&(grows||source[a.span]>1)){
-      weights[i]=Math.min(weights[i],(1-distance)/distance);
-    }
-    if(a.line!==start[i].line){
-      weights[1-i]=Math.min(weights[1-i],2*distance);
-    }
-  });
-  // Keeping one seam aligned lets all four neighbours remain rectangles.
-  const largest=Math.max(...weights);
-  return largest?weights.map(weight=>weight/largest):weights;
-}
-function cornerSeams(base,axes,destination,weights){
-  const origin=base.origin||{x:0,y:0},boxes=visibleBoxes(base),records=[];
-  for(const a of axes){
-    const groups=[],seeds=[];
-    // Include the continuation across the vertex only when it actually meets the handle.
-    for(const at of [a.vertex+(a.farCross?-.25:.25),a.vertex+(a.farCross?.25:-.25)]){
-      const group=seamComponent(base,boxes,a.axis,a.line,at);
-      if(!group||Math.abs(group.border-a.border)>1e-6||groups.some(g=>g.before.includes(group.before[0])))continue;
-      if(!group.before.some(n=>{const b=boxes.get(n);return b[a.cross]<=a.crossBorder+1e-6&&b[a.cross]+b[group.length]>=a.crossBorder-1e-6}))continue;
-      groups.push(group);seeds.push(at);
-    }
-    if(!groups.length)continue;
-    const limits=groups.map(g=>seamLimits(g,boxes,1e-5));
-    const dest=clamp(destination[a.axis],Math.max(...limits.map(v=>v[0])),Math.min(...limits.map(v=>v[1])));
-    if(Math.abs(dest-a.border)<1e-7)continue;
-    seeds.forEach((at,i)=>{
-      const weight=i===0?1:weights[a.axis==='x'?0:1];
-      const border=a.border+(dest-a.border)*weight;
-      if(Math.abs(border-a.border)>1e-8){
-        records.push({axis:a.axis,line:a.line+origin[a.axis],at:at+origin[a.cross],delta:border-a.line});
-      }
-    });
-  }
-  return records.length?{...base,seams:[...(base.seams||[]),...records]}:base;
-}
-// A captured strip stays absorbed until there is room to reopen it.
-function stripRemainder(memory,key,raw,previousRaw,stride,selected=false){
-  const enter=Math.min(selected?32:16,stride/4),leave=selected?enter+4:Math.min(enter+4,stride*.4);
-  const held=previousRaw<=1e-8||(previousRaw<=leave+1e-8&&memory.has(key));
-  if(raw<=(held?leave:enter)+1e-8){memory.add(key);return 0}
-  memory.delete(key);return raw;
-}
-function previewCorner(e,p,axes){
-  const g=drag,wallBox=wall.getBoundingClientRect();
-  if(p.x<0||p.y<0||p.x>model.width||p.y>model.height){
-    if(g.cornerBase){renderCells();g.cornerBase=null}
-    resizePreview(p);return;
-  }
-  if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
-  const destination={},rawTarget={},steps={},rawSteps={};
-  for(const a of axes){
-    const horizontal=a.axis==='x',pitch=horizontal?wallBox.width/model.width:wallBox.height/model.height;
-    const delta=(horizontal?e.clientX-g.clientX:e.clientY-g.clientY)/pitch;
-    const raw=a.border+delta,offset=raw-a.line,sign=g.edge.includes(horizontal?'e':'s')?1:-1;
-    const previous=a.lastRaw??a.border;a.lastRaw=raw;
-    rawTarget[a.axis]=raw;destination[a.axis]=raw;
-    rawSteps[a.axis]=delta===0?0:Math.trunc(offset);
-    if(sign*delta>0&&sign*offset>0){
-      const line=a.line+sign*(Math.floor(sign*offset)+1);
-      const stride=Math.min(1,sign*(line-a.border))*pitch,remaining=sign*(line-raw)*pitch;
-      const gap=stripRemainder(a.snap??=new Set(),line,remaining,sign*(line-previous)*pitch,stride);
-      if(gap!==remaining)destination[a.axis]=line-sign*gap/pitch;
-    }
-    steps[a.axis]=delta===0?0:Math.trunc(destination[a.axis]-a.line);
-  }
-  let area=targetBox(g.source,g.edge,steps.x,steps.y);
-  if(!g.cornerBase||!equal(g.cornerArea,area)){
-    g.cornerBase=equal(area,g.source)?model:reshape(area,g.source);
-    if(!g.cornerBase&&(steps.x!==rawSteps.x||steps.y!==rawSteps.y)){
-      area=targetBox(g.source,g.edge,rawSteps.x,rawSteps.y);
-      Object.assign(destination,rawTarget);
-      g.cornerBase=equal(area,g.source)?model:reshape(area,g.source);
-    }
-    if(!g.cornerBase){renderCells();g.outlineKey=null;resizePreview(p);return}
-    g.cornerArea=area;g.cornerAxes=cornerAxes(current(g.cornerBase),g.edge,g.cornerBase);
-    renderCells(g.cornerBase);renderGridSize();overlay.replaceChildren();g.extended=false;g.outlineKey=null;
-    g.drawn=visibleBoxes(g.cornerBase);
-  }
-  const weights=cornerContinuation(g.cornerAxes,axes,destination,g.source,g.edge);
-  const candidate=cornerSeams(g.cornerBase,g.cornerAxes,destination,weights);
-  const boxes=visibleBoxes(candidate),size={width:model.width,height:model.height};
-  candidate.nodes.forEach((n,i)=>{
-    const b=boxes.get(n);
-    if(!equal(b,g.drawn.get(n)))position(tiles.children[i],b,size);
-  });
-  g.drawn=boxes;g.next=candidate===model?null:candidate;
-  g.message='Пропорции ячеек изменены.';g.redraw=null;
-}
-function previewCellResize(e,p){
-  const g=drag,wallBox=wall.getBoundingClientRect();
-  let collapsed=null;
-  for(const a of g.collapseAxes||[]){
-    const horizontal=a.axis==='x',sign=g.edge.includes(horizontal?'e':'s')?1:-1;
-    const delta=horizontal?e.clientX-g.clientX:e.clientY-g.clientY;
-    const scale=horizontal?wallBox.width/model.width:wallBox.height/model.height;
-    const thickness=visualRect(g.source)[a.span]*scale;
-    const raw=thickness+sign*delta,previous=a.previousThickness??thickness;
-    a.previousThickness=raw;
-    if(sign*delta>=0||p.x<0||p.y<0||p.x>model.width||p.y>model.height)continue;
-    if(stripRemainder(a.capture??=new Set(),a.axis,raw,previous,scale,true)>0)continue;
-    if(a.collapse===undefined){
-      const seam=dividerStage(model,{...a,scale,at:g.source[a.cross],tangent:a.crossBorder+(a.farCross?-1e-5:1e-5),
-        edge:horizontal?(sign>0?'e':'w'):(sign>0?'s':'n')});
-      a.collapse=seam.group?fixedDividerLayout(seam,-sign):null;
-    }
-    if(a.collapse){collapsed=a.collapse;break}
-  }
-  if(collapsed){
-    if(g.next!==collapsed){
-      if(g.growth){for(const arm of Object.values(g.growth))clearTimeout(arm.timer);delete g.growth}
-      g.extended=false;renderCells(collapsed);renderGridSize();overlay.replaceChildren();
-    }
-    g.next=collapsed;g.collapsed=true;g.message='Полоса поглощена соседями.';return;
-  }
-  if(g.collapsed){g.collapsed=false;g.cornerBase=null;g.outlineKey=null;g.next=null;renderCells()}
-  const parallel=g.wallAxis&&Math.abs(g.wallAxis.axis==='x'?e.clientX-g.clientX:e.clientY-g.clientY)<=4;
-  const fractional=g.axes&&(!g.wallAxis||parallel);
-  if(g.fractional!==fractional){
-    if(g.fractional!==undefined){g.cornerBase=null;g.outlineKey=null;renderCells();overlay.replaceChildren()}
-    g.fractional=fractional;
-  }
-  if(fractional)previewCorner(e,p,g.axes);else resizePreview(p);
-}
-function dividerStage(base,seam,border){
-  const boxes=visibleBoxes(base),group=seamComponent(base,boxes,seam.axis,seam.line,seam.at);
-  return {...seam,base,group,border:group?.border??border,advances:new Map(),
-    affected:group?group.before.concat(group.after):[],limits:group?seamLimits(group,boxes,1e-5):null,
-    size:{width:base.width,height:base.height}};
-}
-function showDividerStage(stage){
-  stage.elements=new Map(stage.base.nodes.map((n,i)=>[n,tiles.children[i]]));
-  stage.live=null;stage.fixed=0;stage.next=null;stage.dest=undefined;stage.absorbMarkers=[];
-}
-function beginDivider(e,seam){
-  const first=dividerStage(model,seam);
-  if(!first.group)return false;
-  showDividerStage(first);
-  drag={kind:'divider',id:e.pointerId,first,stage:first,start:seam.axis==='x'?e.clientX:e.clientY};
-  wall.setPointerCapture(e.pointerId);return true;
-}
-// Split a disappearing band between the rectangles that actually share its seam.
-function distributeBand(base,band,sides,receiver,axis,sign){
-  const additions=new Map();
-  let remaining=childrenOf(band);
-  for(const side of sides){
-    const area=targetBox(side,axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n'),
-      axis==='x'?sign:0,axis==='y'?sign:0,base);
-    const taken=[],rest=[];
-    for(const part of remaining)collectPieces(part,area,taken,rest);
-    const pieces=[...childrenOf(side),...taken],cover=rectangular(pieces);
-    if(!cover||!equal(area,cover))return null;
-    additions.set(side,combined(pieces,area,side.key));
-    remaining=rest;
-  }
-  if(remaining.length)return null;
-  return {...base,active:receiver.key,nodes:base.nodes.filter(n=>n!==band).map(n=>additions.get(n)||n)};
-}
-function fixedDividerLayout(g,sign,click=false){
-  const state=g.base,sides=sign>0?g.group.before:g.group.after,boxes=visibleBoxes(state);
-  const receiver=click?current(state):sides.find(n=>{
-    const b=boxes.get(n);
-    return b[g.cross]<=g.tangent&&g.tangent<b[g.cross]+b[g.group.length];
-  })||sides[0];
-  const edge=click?g.edge:(g.axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n'));
-  const anchor=slot(receiver.key,state.width),far='es'.includes(edge),extent=g.group.span;
-  const release=click&&receiver.children&&(far?anchor[g.axis]<receiver[g.axis]+receiver[extent]-1:anchor[g.axis]>receiver[g.axis]);
-  const step=(far?1:-1)*(release?-1:1);
-  const area=targetBox(receiver,edge,g.axis==='x'?step:0,g.axis==='y'?step:0,state);
-  if(equal(receiver,area))return null;
-  const origin=state.origin||{x:0,y:0};
-  const base={...state,seams:[...(state.seams||[]),{axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:0}]};
-  const donors=sign>0?g.group.after:g.group.before;
-  if(!click&&sides.length>1&&donors.length===1&&donors[0][extent]===1){
-    return distributeBand(base,donors[0],sides,receiver,g.axis,sign);
-  }
-  return reshape(area,receiver,base);
-}
-function advanceDivider(stage,sign){
-  if(stage.advances.has(sign))return stage.advances.get(sign);
-  const base=fixedDividerLayout(stage,sign);
-  let next=null;
-  if(base){
-    const {axis,cross,scale,tangent}=stage,n=current(base),span=stage.group.span;
-    const edge=axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n');
-    const line=n[axis]+(sign>0?n[span]:0),box=visualRect(n,base);
-    const border=box[axis]+(sign>0?box[span]:0);
-    if(sign*(border-stage.border)>1e-7){
-      next=dividerStage(base,{axis,cross,scale,tangent,edge,line,at:n[cross]},border);
-    }
-  }
-  stage.advances.set(sign,next);return next;
-}
-function previewDivider(e){
-  const gesture=drag,first=gesture.first,px=(first.axis==='x'?e.clientX:e.clientY)-gesture.start;
-  if((!gesture.moved&&Math.abs(px)<4)||gesture.lastPx===px)return;
-  const lastPx=gesture.lastPx??0;
-  gesture.moved=true;gesture.lastPx=px;
-  const raw=first.border+px/first.scale,dir=Math.sign(px);
-  let target=raw,g=first,finishedBand=false;
-  while(dir&&g.group){
-    const next=advanceDivider(g,dir);
-    if(!next)break;
-    const boundary=(next.border-first.border)*g.scale;
-    const remaining=dir*(boundary-px),stride=dir*(next.border-g.border)*g.scale;
-    const source=current(g.base),shrinking=dir>0?g.group.after:g.group.before;
-    const self=g===first&&source[g.group.span]===1&&shrinking.includes(source);
-    const thickness=self?visibleBoxes(g.base).get(source)[g.group.span]*g.scale:0;
-    const gap=self
-      ?stripRemainder(g.snap??=new Set(),dir,thickness-dir*px,thickness-dir*lastPx,g.scale,true)
-      :stripRemainder(g.snap??=new Set(),dir,remaining,dir*(boundary-lastPx),stride);
-    if(gap>1e-8){
-      if(!self&&gap!==remaining)target=next.border-dir*gap/g.scale;
-      break;
-    }
-    finishedBand=self&&!next.base.nodes.some(n=>n.key===source.key);
-    g.crossed=dir;g=next;
-    if(finishedBand||remaining>0){target=g.border;break}
-  }
-  if(gesture.stage!==g){
-    gesture.stage.elements=null;gesture.stage.live=null;gesture.stage.absorbMarkers=[];
-    renderCells(g.base);overlay.replaceChildren();showDividerStage(g);gesture.stage=g;
-  }
-  if(finishedBand){
-    paintDividerLine(g.axis,visualRect(current(first.base),first.base),g.border,g.base);return;
-  }
-  if(!g.group){
-    const b=visualRect(current(g.base),g.base);
-    paintDividerLine(g.axis,b,g.border,g.base);return;
-  }
-  const boxes=visibleBoxes(g.base),travel=target===g.border?0:px-(g.border-first.border)*g.scale;
-  const sign=Math.sign(travel),dest=clamp(target,...g.limits);
-  const shrinking=sign>0?g.group.after:g.group.before;
-  const remaining=Math.min(...shrinking.map(n=>boxes.get(n)[g.group.span]*g.scale))-Math.abs(travel);
-  if(g.crossed!==sign||remaining>=82)g.crossed=0;
-  const fixed=sign&&!g.crossed&&(g===first||Math.abs(travel)>=4)&&remaining<(g.fixed===sign?82:80)?sign:0;
-  if(g.fixed!==fixed){
-    g.fixed=fixed;g.next=fixed?advanceDivider(g,fixed)?.base:null;
-    overlay.replaceChildren();g.absorbMarkers=[];
-    if(g.next){
-      for(const n of sign>0?g.group.before:g.group.after){
-        const after=g.next.nodes.find(cell=>cell.key===n.key);
-        if(!after||equal(n,after))continue;
-        const border=document.createElement('div');
-        border.className='outline pending divider-result';position(border,after,g.next);overlay.append(border);
-      }
-      for(const n of shrinking){
-        const after=g.next.nodes.find(cell=>cell.key===n.key);
-        if(after&&equal(after,n))continue;
-        const mark=document.createElement('div');mark.className='absorb-preview';overlay.append(mark);
-        g.absorbMarkers.push({n,mark});
-      }
-    }
-  }
-  g.dest=dest;
-  const live=g.live??=new Map(boxes);
-  for(const n of g.affected){
-    const b={...boxes.get(n)};
-    if(g.group.before.includes(n))b[g.group.span]=dest-b[g.axis];
-    else{b[g.group.span]+=b[g.axis]-dest;b[g.axis]=dest}
-    live.set(n,b);
-    position(g.elements.get(n),b,g.size);
-  }
-  for(const {n,mark} of g.absorbMarkers||[])position(mark,live.get(n),g.size);
-  paintDivider(g.group,g.base,live);
-}
-function fractionalResult(g){
-  const state=g.base;
-  if(g.dest===undefined||Math.abs(g.dest-g.border)<1e-8)return null;
-  const origin=state.origin||{x:0,y:0};
-  const record={axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:g.dest-g.line};
-  const seams=[...(state.seams||[])],last=seams.at(-1);
-  if(last&&last.axis===record.axis&&last.line===record.line&&last.at===record.at)seams.pop();
-  if(Math.abs(record.delta)>1e-8||seams.length)seams.push(record);
-  const next={...state,seams},b=visibleBoxes(next).get(g.group.before[0]);
-  return Math.abs(b[g.axis]+b[g.group.span]-g.dest)<1e-5?next:null;
-}
-function settleDivider(g,next){
-  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const previous=[];
-  if(!reduce){
-    for(const n of g.affected){
-      const tile=g.elements.get(n);
-      previous.push({key:n.key,from:tile.getBoundingClientRect(),tile});
-    }
-  }
-  remember(next,'Граница ячейки изменена.');
-  const wallRect=wall.getBoundingClientRect(),timing={duration:120,easing:'ease-out'};
-  for(const {key,from,tile} of previous){
-    const target=tiles.querySelector('[data-key="'+key+'"]');
-    if(target){
-      const to=target.getBoundingClientRect();
-      target.animate([{transformOrigin:'0 0',transform:'translate('+(from.x-to.x)+'px,'+(from.y-to.y)+'px) scale('+from.width/to.width+','+from.height/to.height+')'},{transformOrigin:'0 0',transform:'none'}],timing);
-    }else{
-      const ghost=document.createElement('div');
-      ghost.className='tile divider-exit';ghost.setAttribute('aria-hidden','true');
-      Object.assign(ghost.style,{left:from.x-wallRect.x+'px',top:from.y-wallRect.y+'px',width:from.width+'px',height:from.height+'px',
-        transformOrigin:g.axis==='x'?(g.fixed>0?'right center':'left center'):(g.fixed>0?'center bottom':'center top')});
-      ghost.append(tile.querySelector('.frame'));wall.append(ghost);
-      const fade=ghost.animate([{transform:'none',opacity:1},{transform:g.axis==='x'?'scaleX(0)':'scaleY(0)',opacity:0}],timing);
-      fade.onfinish=fade.oncancel=()=>ghost.remove();
-    }
-  }
-}
-function paintDivider(group,state,boxes=visibleBoxes(state)){
-  const b=group.before.map(n=>boxes.get(n)).reduce(bounds);
-  const end=boxes.get(group.before[0]);
-  paintDividerLine(group.axis,b,group.axis==='x'?right(end):bottom(end),state);
-}
-function paintDividerLine(axis,b,border,state){
-  const bar=overlay.querySelector('.shared-divider')||document.createElement('div'),vertical=axis==='x';
-  bar.className='shared-divider '+(vertical?'vertical':'horizontal');
-  const x=vertical?border:b.x,y=vertical?b.y:border;
-  Object.assign(bar.style,{left:100*x/state.width+'%',top:100*y/state.height+'%',
-    [vertical?'height':'width']:100*(vertical?b.h/state.height:b.w/state.width)+'%'});
-  if(!bar.parentNode)overlay.append(bar);
-}
-function transformSeams(state,dir,transform){
-  if(!state.seams?.length)return;
-  const origin=state.origin?.[dir]||0;
-  state.seams=state.seams.flatMap(record=>{
-    if(record.axis!==dir){
-      const at=transform(record.at-origin);
-      return at===null?[]:[{...record,at:at+origin}];
-    }
-    const left=transform(record.line-origin-1),right=transform(record.line-origin);
-    return left!==null&&right===left+1?[{...record,line:right+origin}]:[];
-  });
-}
-
-function position(el,area,state=model){
-  const pieces=state.seams?.length&&el.matches('.remove-band,.picked-strip,.strip-hole,.trim-preview,.absorb-preview,.insert-band i,i')?[]:null;
-  const r=visualRect(area,state,pieces);
-  Object.assign(el.style,{left:(r.x*100/state.width)+'%',top:(r.y*100/state.height)+'%',width:(r.w*100/state.width)+'%',height:(r.h*100/state.height)+'%'});
-  if(pieces){
-    el.style.clipPath='';
-    if(pieces.length>1&&pieces.reduce((sum,b)=>sum+b.w*b.h,0)<r.w*r.h-1e-7){
-      const scaleX=wall.clientWidth/state.width,scaleY=wall.clientHeight/state.height;
-      const path=pieces.map(b=>{
-        const x=(b.x-r.x)*scaleX,y=(b.y-r.y)*scaleY,w=b.w*scaleX,h=b.h*scaleY;
-        return 'M '+x+' '+y+' h '+w+' v '+h+' h '+(-w)+' Z';
-      }).join(' ');
-      el.style.clipPath='path("'+path+'")';
-    }
-  }
-}
+function position(el,r,state=model){Object.assign(el.style,{left:(r.x*100/state.width)+'%',top:(r.y*100/state.height)+'%',width:(r.w*100/state.width)+'%',height:(r.h*100/state.height)+'%'})}
 function placePreview(r,cls){
   const d=document.createElement('div');d.className='outline '+cls;position(d,r);overlay.append(d);
 }
@@ -1641,30 +1164,13 @@ function render(){
 }
 const defaultHint='Потяните центр ячейки для переноса, сторону или угол — для изменения размера.';
 function point(e){
-  const b=wall.getBoundingClientRect();
-  const p={x:(e.clientX-b.left)*model.width/b.width,y:(e.clientY-b.top)*model.height/b.height};
-  if(model.seams?.length){
-    for(const [node,box] of visibleBoxes(model)){
-      if(p.x>=box.x&&p.x<right(box)&&p.y>=box.y&&p.y<bottom(box)){
-        return {x:node.x+(p.x-box.x)*node.w/box.w,y:node.y+(p.y-box.y)*node.h/box.h};
-      }
-    }
-  }
-  return p;
+  const b=wall.getBoundingClientRect();return {x:(e.clientX-b.left)*model.width/b.width,y:(e.clientY-b.top)*model.height/b.height};
 }
 function hit(p){
   const x=clamp(p.x,0,model.width-.00001),y=clamp(p.y,0,model.height-.00001);
   return model.nodes.find(n=>x>=n.x&&x<right(n)&&y>=n.y&&y<bottom(n))||current();
 }
-function edgeAt(p,e){
-  if(e&&!model.selection){
-    const b=tiles.querySelector('.tile.selected')?.getBoundingClientRect();
-    if(b){
-      const nearX=Math.abs(e.clientX-b.left)<=6?'w':Math.abs(e.clientX-b.right)<=6?'e':'';
-      const nearY=Math.abs(e.clientY-b.top)<=6?'n':Math.abs(e.clientY-b.bottom)<=6?'s':'';
-      if(nearX&&nearY)return nearY+nearX;
-    }
-  }
+function edgeAt(p){
   if(model.selection)return '';
   const r=current(),b=wall.getBoundingClientRect(),dx=6*model.width/b.width,dy=6*model.height/b.height;
   const nearX=Math.abs(p.x-r.x)<=Math.min(2*dx,r.w/4)?'w':Math.abs(p.x-right(r))<=Math.min(2*dx,r.w/4)?'e':'';
@@ -1794,7 +1300,7 @@ function resizePreview(p){
   say('Тяните к следующей позиции сетки. Минимальная ячейка — 1 × 1, границы задаёт внешнее кольцо.');
 }
 function cursorHint(edge,node){
-  if(edge.length===2)return 'Тяните угол, чтобы изменить ширину и высоту ячейки.';
+  if(edge.length===2)return 'Угол выбранной ячейки. Тяните по диагонали для поглощения. Тяните внутрь для возврата.';
   if(edge)return 'Граница выбранной ячейки. Тяните к соседней линии сетки.';
   return 'Центр '+address(node)+' · '+nameOf(node)+'. Нажмите для выбора или перетащите содержимое.';
 }
@@ -1813,11 +1319,9 @@ wall.addEventListener('pointerdown',e=>{
   highlightEdge('');
   e.preventDefault();
   wall.dataset.pointerFocus="";wall.focus({preventScroll:true});
-  const p=point(e),target=hit(p),edge=edgeAt(p,e);
+  const p=point(e),target=hit(p),edge=edgeAt(p);
   if((e.ctrlKey||e.metaKey)){clearInsertionPreview();togglePicked(target.key);return}
   if(e.shiftKey){clearInsertionPreview();pickRange(target);return}
-  const seam=dividerAt(e,edge);
-  if(seam&&beginDivider(e,seam)){clearInsertionPreview();paintDivider(drag.first.group,model);return}
   const strip=!edge?innerStrip(p):null;
   if(strip){startStrip(e,strip.dir,strip.index);return}
   clearInsertionPreview();
@@ -1826,12 +1330,6 @@ wall.addEventListener('pointerdown',e=>{
   if(!members)choose(source.key);
   wall.setPointerCapture(e.pointerId);
   drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,next:null};
-  if(edge.length===2&&!e.altKey){
-    const axes=cornerAxes(source,edge,model);
-    const internal=axes.filter(a=>a.line>0&&a.line<(a.axis==='x'?model.width:model.height));
-    drag.collapseAxes=internal.filter(a=>source[a.span]===1);
-    if(internal.length){drag.axes=axes;drag.wallAxis=axes.find(a=>!internal.includes(a))}
-  }
 });
 wall.addEventListener('pointermove',e=>{
   const p=point(e);
@@ -1840,21 +1338,15 @@ wall.addEventListener('pointermove',e=>{
     if(e.target.closest('.clear-camera')){
       clearInsertionPreview();highlightEdge('');wall.style.cursor='default';return;
     }
-    const edge=edgeAt(p,e),strip=!edge&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey?innerStrip(p):null;
-    const seam=dividerAt(e,edge);
-    if(seam){
-      const group=seamComponent(model,visibleBoxes(model),seam.axis,seam.line,seam.at);
-      if(group){clearInsertionPreview();highlightEdge(edge);paintDivider(group,model);wall.style.cursor=seam.axis==='x'?'col-resize':'row-resize';return}
-    }
+    const edge=edgeAt(p),strip=!edge&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey?innerStrip(p):null;
     if(strip){clearInsertionPreview();highlightEdge('');wall.style.cursor='copy';say(stripLabel(strip.dir,strip.index))}
     else{clearInsertionPreview();highlightEdge(edge);wall.style.cursor=cursorFor(edge);say(cursorHint(edge,hit(p)))}
     return;
   }
   if(e.pointerId!==drag.id)return;
-  if(drag.kind==='divider'){previewDivider(e);return}
   if(Math.hypot(e.clientX-drag.clientX,e.clientY-drag.clientY)>=4)drag.moved=true;
   if(!drag.moved)return;
-  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);previewCellResize(e,p);return}
+  if(drag.kind==='resize'){wall.style.cursor=cursorFor(drag.edge);resizePreview(p);return}
   carryCells(drag,e);
   if(drag.source.children||drag.members){wall.style.cursor='grabbing';previewGroupMove(p);return}
   const target=hit(p),source=drag.source;
@@ -1883,20 +1375,7 @@ function cancelGesture(message){
 }
 wall.addEventListener('pointerup',e=>{
   if(!drag||e.pointerId!==drag.id)return;
-  if(drag.kind==='divider'){
-    previewDivider(e);
-    const {stage:g,moved}=drag;drag=null;
-    if(wall.hasPointerCapture(e.pointerId))wall.releasePointerCapture(e.pointerId);
-    if(!moved&&g.onGrip)g.next=fixedDividerLayout(g,'es'.includes(g.edge)?1:-1,true);
-    if(g.next&&moved)settleDivider(g,g.next);
-    else{
-      const next=g.next||fractionalResult(g)||g.base;
-      if(next!==model)remember(next,'Пропорции соседних ячеек изменены.');else render();
-    }
-    overlay.replaceChildren();return;
-  }
   const g=drag,p=point(e),outside=p.x<0||p.y<0||p.x>model.width||p.y>model.height;
-  if(g.collapseAxes&&g.moved)previewCellResize(e,p);
   if(outside&&g.kind!=='resize'){cancelGesture('Действие отменено за пределами раскладки.');return}
   // Commit the resize already previewed, including the retained line inside the snap band.
   if(g.kind==='move'&&g.moved&&(g.source.children||g.members))previewGroupMove(p);
@@ -1962,24 +1441,6 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&['KeyZ','KeyY'].includes(e.code)){e.preventDefault();history(e.code==='KeyY'||e.shiftKey)}
 });
 const sample=new URLSearchParams(location.search).get('sample');
-if(sample==='exit-strip'||sample==='exit-column'){
-  model=seed(4);
-  model.feeds[10]=null;
-  const column=sample==='exit-column';
-  const regions=column?[[10,2,2,2,1],[15,2,3,2,1],[9,1,2,1,2]]:
-    [[10,2,2,1,2],[15,3,2,1,2],[6,2,1,2,1]];
-  for(const [key,x,y,w,h] of regions){
-    model=reshape(rect(x,y,w,h),model.nodes.find(n=>n.key===key),model);
-  }
-}
-if(sample==='narrow-strip'){model=seed(4);model.active=5;}
-if(sample==='absorb-down'){
-  model=seed(4);
-  model=reshape(rect(0,1,2,1),model.nodes[4],model);
-  model.feeds[model.active]=null;
-}
-if(sample==='corner-proportions'){model=seed(4);model.active=2;}
-if(sample==='proportions'){model=seed(2);model.active=2;}
 if(sample==='3x3'||sample==='2x2'){
   const size=sample==='2x2'?2:3;
   model=reshape(rect(0,0,size,size),current());
