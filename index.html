@@ -29,7 +29,7 @@ header,.toolrow,.modegroup,.history,.heading,.readout,.strip,.headingline{displa
 .axes{display:grid;gap:2px}
 #wall{grid-column:2;grid-row:2;position:relative;width:100%;height:clamp(400px,calc(100vh - 216px),860px);background:var(--wall);outline:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none;isolation:isolate}
 .tile{position:absolute;padding:1.5px;color:white}.frame{height:100%;width:100%;overflow:hidden;position:relative;background:var(--cell)}.scene{position:absolute;inset:0;background-size:cover;background-position:center;}.frame:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent 40%);pointer-events:none}
-.name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--line) 35%,var(--cell)) 0 1px,var(--cell) 1px 8px)}.empty .name{color:var(--muted);font-weight:400}.selected{z-index:2}.selected .frame::before{content:"";position:absolute;inset:0;z-index:2;border:2px solid var(--accent);pointer-events:none}.selected .name{color:white}.corner{position:absolute;width:6px;height:6px;background:var(--accent);border:1px solid var(--wall);z-index:3;pointer-events:none}.nw{top:0;left:0}.ne{top:0;right:0}.sw{bottom:0;left:0}.se{bottom:0;right:0}
+.name{position:absolute;left:6px;right:4px;bottom:3px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-size:clamp(10px,.85vw,14px);font-weight:600;z-index:1;text-shadow:0 1px 2px #000}.empty .frame{background:linear-gradient(145deg,color-mix(in srgb,var(--wall),white 9%),color-mix(in srgb,var(--wall),white 4%))}.empty .frame::after{content:none}.selected{z-index:2}.selected .frame::before{content:"";position:absolute;inset:0;z-index:2;border:2px solid var(--accent);pointer-events:none}.selected .name{color:white}.corner{position:absolute;width:6px;height:6px;background:var(--accent);border:1px solid var(--wall);z-index:3;pointer-events:none}.nw{top:0;left:0}.ne{top:0;right:0}.sw{bottom:0;left:0}.se{bottom:0;right:0}
 .overlay{pointer-events:none;position:absolute;z-index:6;inset:0}.outline{position:absolute;box-shadow:inset 0 0 0 2px var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}.outline.destination{outline:2px dashed var(--accent-light);outline-offset:-3px;box-shadow:none;background:color-mix(in srgb,var(--accent) 12%,transparent)}.outline.source{background:transparent}.outline.pending{border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent);box-shadow:none}.outline.invalid{border-color:var(--warning);background:color-mix(in srgb,var(--warning) 15%,transparent)}.guide-line{position:absolute;z-index:7;background:var(--accent-light)}
 .edge-cue{position:absolute;pointer-events:none;border:0 solid var(--accent-light)}
 .absorb-preview{position:absolute;pointer-events:none;background:repeating-linear-gradient(45deg,transparent 0 9px,color-mix(in srgb,var(--accent) 43%,transparent) 9px 11px)}
@@ -1026,7 +1026,7 @@ function previewReturning(before,box,next,early=false){
     if(feed){
       const scene=document.createElement('div');scene.className='scene';scene.style.cssText=sceneStyle(feed);frame.append(scene);
     }
-    const label=document.createElement('span');label.className='name';label.textContent='↩ '+nameOf(n,next);
+    const label=document.createElement('span');label.className=feed?'name':'sr-only';label.textContent='↩ '+nameOf(n,next);
     frame.append(label);tile.append(frame);overlay.append(tile);
     names.push(address(n)+' · '+nameOf(n,next));
   }
@@ -1076,7 +1076,7 @@ function renderCells(state=model){
     if(feed){
       const scene=document.createElement('div');scene.className='scene';scene.style.cssText=sceneStyle(feed);frame.append(scene);
     }
-    const label=document.createElement('span');label.className='name';label.textContent=nameOf(n,state);frame.append(label);tile.append(frame);
+    const label=document.createElement('span');label.className=feed?'name':'sr-only';label.textContent=nameOf(n,state);frame.append(label);tile.append(frame);
     if(n.key===state.active&&!state.selection){
       for(const side of 'wens'){
         const grip=document.createElement('span');grip.className='edge-grip';grip.dataset.side=side;tile.append(grip);
