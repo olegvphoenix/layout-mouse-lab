@@ -1124,8 +1124,12 @@ function targetBox(n,e,dx,dy,state=model){
   if(e.includes('s'))b=clamp(b+dy,t+1,state.height);
   return rect(l,t,r-l,b-t);
 }
-// Halfway between two grid lines, keep the line nearer the starting edge.
-const step = distance => Math.sign(distance)*Math.max(0,Math.ceil(Math.abs(distance)-.5-1e-9));
+// The frame tracks the pointer. Only its snapped outline remembers a grid line.
+function resizeStep(distance,previous,pitch){
+  const delta=distance-previous;
+  const beyond=Math.abs(delta)-.5-2/pitch;
+  return previous+Math.sign(delta)*Math.max(0,Math.ceil(beyond-1e-9));
+}
 function previewGridExtension(p,sx,sy){
   const {width,height}=model,{edge}=drag;
   const wallBounds=wall.getBoundingClientRect();
@@ -1173,14 +1177,24 @@ function previewGridExtension(p,sx,sy){
 function resizePreview(p){
   drag.redraw=()=>resizePreview(p);
   const {source,edge,start}=drag,dx=p.x-start.x,dy=p.y-start.y;
-  $('return-info').textContent='';
-  const sx=step(dx),sy=step(dy);
+  const wasExtended=drag.extended;
+  const bounds=wall.getBoundingClientRect();
+  const sx=resizeStep(dx,drag.snapX??0,bounds.width/model.width);
+  const sy=resizeStep(dy,drag.snapY??0,bounds.height/model.height);
+  drag.snapX=sx;drag.snapY=sy;
   if(previewGridExtension(p,sx,sy))return;
   const liveBox=targetBox(source,edge,dx,dy);
   const liveTile=tiles.querySelector('.tile.selected');
   liveTile.classList.toggle('resize-live',!equal(liveBox,source));
   position(liveTile,liveBox);
   const box=targetBox(source,edge,sx,sy);
+  const earlyBox=targetBox(source,edge,Math.sign(dx),Math.sign(dy));
+  const earlyReturn=edge.length===1 && contains(source,earlyBox) && !equal(source,earlyBox);
+  // Keep the existing overlay while only the fractional frame size changes.
+  const outlineKey=[box.x,box.y,box.w,box.h,equal(liveBox,source),earlyReturn].join('/');
+  if(!wasExtended&&drag.outlineKey===outlineKey)return;
+  drag.outlineKey=outlineKey;
+  $('return-info').textContent='';
   if(!equal(box,source)){
     const next=reshape(box,source);drag.next=next;
     overlay.replaceChildren();placePreview(box,next?'pending':'pending invalid');
@@ -1211,8 +1225,6 @@ function resizePreview(p){
   }
   overlay.replaceChildren();drag.next=null;
   if(!equal(liveBox,source))placePreview(source,'pending');
-  const earlyBox=targetBox(source,edge,Math.sign(dx),Math.sign(dy));
-  const earlyReturn=edge.length===1 && contains(source,earlyBox) && !equal(source,earlyBox);
   if(earlyReturn){
     const next=reshape(earlyBox,source);
     if(next)previewReturning(source,earlyBox,next,true);
@@ -1283,7 +1295,7 @@ wall.addEventListener('pointerup',e=>{
   if(!drag||e.pointerId!==drag.id)return;
   const g=drag,p=point(e),outside=p.x<0||p.y<0||p.x>model.width||p.y>model.height;
   if(outside&&g.kind!=='resize'){cancelGesture('Действие отменено за пределами раскладки.');return}
-  if(g.kind==='resize'&&g.moved)resizePreview(p);
+  // Commit the resize already previewed, including the retained line inside the snap band.
   if(g.kind==='move'&&g.moved&&(g.source.children||g.members))previewGroupMove(p);
   g.visual?.layer.remove();
   drag=null;
