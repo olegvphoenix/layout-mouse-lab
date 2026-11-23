@@ -121,7 +121,7 @@ header{flex-wrap:wrap;gap:10px 20px}
 .strip-header>.strip-grip{position:static;transform:none;width:100%;height:100%;border-radius:5px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
 .strip-header>.strip-grip:only-child{grid-column:1/-1}
 .strip-header>.remove-mark{position:static;transform:none;place-self:center;width:min(100%,14px);height:min(100%,14px);min-width:0;min-height:0;background:transparent;color:var(--muted);font:500 13px/1 system-ui}
-.strip-header>.remove-mark:is(:hover,:active,:focus-visible){background:transparent;color:var(--remove)}
+.strip-header>.remove-mark:is(:hover,:active,:focus-visible){border-radius:4px;background:var(--remove);color:var(--on-accent)}
 .strip-header>.remove-mark::before{width:auto;height:auto;background:transparent;color:inherit;pointer-events:none}
 .strip-header>.remove-mark:focus-visible{outline:1px solid var(--remove);outline-offset:1px}
 .slot-tools .insert-mark:not(:hover,:focus-visible)::before{background:transparent}
