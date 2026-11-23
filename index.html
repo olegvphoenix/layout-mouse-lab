@@ -210,7 +210,7 @@ const nameOf = (node,s=model) => s.feeds[node.key]?.name ?? 'Пусто';
 const clamp = (v,lo,hi) => Math.max(lo,Math.min(hi,v));
 function seed(size=8) {
   const cells=size*size;
-  return {width:size,height:size,nodes:Array.from({length:cells},(_,key)=>({...slot(key,size),key})),feeds:Array.from({length:cells},(_,i)=>feedAt(i)),seams:[],active:0};
+  return {width:size,height:size,nodes:Array.from({length:cells},(_,key)=>({...slot(key,size),key})),feeds:Array.from({length:cells},(_,i)=>feedAt(i)),active:0};
 }
 let model=seed(), past=[], future=[], drag=null;
 const current = (s=model) => s.nodes.find(n=>n.key===s.active);
@@ -286,32 +286,6 @@ function gridWithBounds(box,old=model){
   const selected=slot(old.active,old.width);
   const cell=rect(clamp(selected.x-box.x,0,box.w-1),clamp(selected.y-box.y,0,box.h-1),1,1);
   next.active=next.nodes.find(n=>contains(n,cell)).key;
-  function projectSeam(s,area){
-    const vertical=s.axis==='x',offset=vertical?area.x:area.y,cross=vertical?area.y:area.x;
-    const at=s.at-offset,span=vertical?area.h:area.w;
-    const lo=clamp(s.lo-cross,0,span),hi=clamp(s.hi-cross,0,span);
-    return at>0&&at<(vertical?area.w:area.h)&&lo<hi?{...s,at,lo,hi}:null;
-  }
-  const remainingSeams=new Set(old.seams),seams=[];
-  for(const s of old.hiddenSeams||[]){
-    const prior=projectSeam(s,before);
-    if(prior){
-      const match=old.seams.find(v=>['axis','at','lo','hi','d'].every(k=>v[k]===prior[k]));
-      if(!match)continue;
-      remainingSeams.delete(match);
-    }
-    seams.push(s);
-  }
-  for(const s of remainingSeams){
-    const vertical=s.axis==='x',cross=vertical?origin.y:origin.x;
-    seams.push({...s,at:s.at+(vertical?origin.x:origin.y),lo:s.lo+cross,hi:s.hi+cross});
-  }
-  next.seams=[];next.hiddenSeams=[];
-  for(const s of seams){
-    const local=projectSeam(s,view);
-    if(local)next.seams.push(local);
-    if(!local||local.hi-local.lo<s.hi-s.lo)next.hiddenSeams.push(s);
-  }
   return next;
 }
 const perimeter=document.querySelector('.axes');
@@ -376,25 +350,6 @@ function editStrips(direction,index,removeCount=0){
   const picked=[...new Set((model.selection||[]).map(keyAfter).filter(k=>k!==null).map(owner))];
   next.selection=picked.length>1?picked:null;
   if(picked.length&&!picked.includes(next.active))next.active=picked[0];
-  function shiftSeams(seams,cut){
-    return seams.flatMap(s=>{
-      if(removeCount){
-        if(s.axis===direction){
-          if(s.at>cut&&s.at<=cut+removeCount)return [];
-          if(s.at===cut&&!seams.some(v=>v.axis===s.axis&&v.at===cut+removeCount&&v.lo===s.lo&&v.hi===s.hi&&v.d===s.d))return [];
-          return [{...s,at:shift(s.at,cut)}];
-        }
-        const lo=shift(s.lo,cut),hi=shift(s.hi,cut);
-        return lo<hi?[{...s,lo,hi}]:[];
-      }
-      if(s.axis===direction){
-        if(s.at===cut)return [s,{...s,at:cut+1}];
-        return [{...s,at:s.at+Number(s.at>cut)}];
-      }
-      return [{...s,lo:s.lo+Number(s.lo>=cut),hi:s.hi+Number(s.hi>cut)}];
-    });
-  }
-  next.seams=shiftSeams(old.seams,index);next.hiddenSeams=shiftSeams(old.hiddenSeams,start);
   return next;
 }
 function stripLabel(dir,i){
@@ -435,11 +390,11 @@ function previewInsertion(dir,i){
   const next=editStrips(dir,i);
   for(let j=0;j<(column?next.height:next.width);j++){
     const segment=document.createElement('i'),cell=column?rect(i,j,1,1):rect(j,i,1,1);
-    position(segment,displayRect(cell,next.seams),next);band.append(segment);
+    position(segment,cell,next);band.append(segment);
   }
   for(const n of model.nodes.filter(n=>n[dir]<i&&n[dir]+n[extent]>i)){
     const outline=document.createElement('span');outline.className='expands';
-    position(outline,displayRect(n));band.append(outline);
+    position(outline,n);band.append(outline);
   }
   overlay.append(band);insertionPreview={dir,index:i,band,mark,next,header,rail};
   return next;
@@ -452,12 +407,12 @@ function startStrip(e,dir,i,remove=false){
   if(remove){clearInsertionPreview();previewRemoval(e);return}
   drag.next=previewInsertion(dir,i);drag.message=stripLabel(dir,i);
   const {next,band,rail}=insertionPreview,column=dir==='x',count=column?next.width:next.height;
-  renderCells(next.seams,next);
+  renderCells(next);
   document.querySelector('.badge').textContent=model.width+' × '+model.height+' → '+next.width+' × '+next.height;
   band.querySelectorAll('.expands').forEach(n=>n.remove());
   for(const n of next.nodes.filter(n=>n[dir]<i&&n[dir]+(column?n.w:n.h)>i)){
     const outline=document.createElement('span');outline.className='expands';
-    position(outline,displayRect(n,next.seams),next);band.append(outline);
+    position(outline,n,next);band.append(outline);
   }
   rail.classList.add('preview-order');
   for(let k=0;k<count;k++){
@@ -528,19 +483,7 @@ function reorderStrips(dir,order){
     if(n.children)moved.children=n.children.map(c=>moveNode(c,hidden));
     return moved;
   }
-  function moveSeams(seams,transform){
-    return seams.flatMap(s=>{
-      if(s.axis===dir)return transform(s.at-1)+1===transform(s.at)?[{...s,at:transform(s.at)}]:[];
-      const points=Array.from({length:s.hi-s.lo},(_,i)=>transform(s.lo+i)).sort((a,b)=>a-b);
-      const spans=[];
-      for(const p of points){
-        const last=spans.at(-1);
-        if(last?.hi===p)last.hi++;else spans.push({...s,lo:p,hi:p+1});
-      }
-      return spans;
-    });
-  }
-  const next={...model,nodes:model.nodes.map(n=>moveNode(n,false)),feeds:[],active:remapKey(model.active),selection:null,seams:moveSeams(model.seams,map)};
+  const next={...model,nodes:model.nodes.map(n=>moveNode(n,false)),feeds:[],active:remapKey(model.active),selection:null};
   model.feeds.forEach((feed,i)=>next.feeds[remapKey(i)]=feed);
   if(model.hiddenFeeds){
     next.hiddenFeeds={};
@@ -550,7 +493,6 @@ function reorderStrips(dir,order){
     }
   }
   if(model.hiddenGroups)next.hiddenGroups=model.hiddenGroups.map(n=>moveNode(n,true));
-  if(model.hiddenSeams)next.hiddenSeams=moveSeams(model.hiddenSeams,world);
   return {next};
 }
 const stripHint='Щёлкните номера строк слева или буквы столбцов сверху, затем потяните любой выбранный заголовок. Shift выделяет диапазон.';
@@ -589,11 +531,10 @@ function liftStrips(g){
     const area=column?rect(index,0,1,model.height):rect(0,index,model.width,1);
     position(hole,area);layer.append(hole);
     for(const n of model.nodes){
-      const r=displayRect(n);
-      if(!overlaps(r,area))continue;
+      if(!overlaps(n,area))continue;
       const tile=document.createElement('div'),original=originals.get(n.key);
       tile.className='cargo-tile'+(original.classList.contains('empty')?' empty':'');
-      position(tile,rect(r.x-area.x,r.y-area.y,r.w,r.h),{width:area.w,height:area.h});
+      position(tile,rect(n.x-area.x,n.y-area.y,n.w,n.h),{width:area.w,height:area.h});
       tile.append(original.querySelector('.frame').cloneNode(true));slice.append(tile);
     }
     cargo.append(slice);
@@ -718,12 +659,12 @@ function renderInsertMarks(){
   }
 }
 function innerStrip(p){
-  const n=hit(p),r=displayRect(n);
+  const n=hit(p);
   let best=null,dist=3;
   for(const [dir,extent,limit,pixels] of [['x','w',model.width,wall.clientWidth],['y','h',model.height,wall.clientHeight]]){
     if(limit>=axis.length)continue;
     for(const side of [0,1]){
-      const index=n[dir]+side*n[extent],gap=Math.abs(p[dir]-r[dir]-side*r[extent])*pixels/limit;
+      const index=n[dir]+side*n[extent],gap=Math.abs(p[dir]-n[dir]-side*n[extent])*pixels/limit;
       if(index>0&&index<limit&&gap<dist){best={dir,index};dist=gap}
     }
   }
@@ -731,7 +672,7 @@ function innerStrip(p){
 }
 function showCroppedGrid(state,box){
   const next=gridWithBounds(box,state);
-  renderCells(next.seams,next);
+  renderCells(next);
   document.querySelector('.badge').textContent=model.width+' × '+model.height+' → '+next.width+' × '+next.height;
   return next;
 }
@@ -742,7 +683,7 @@ function previewPerimeter(box){
   const expanded=!equal(view,original);
   const state=expanded?gridWithBounds(view):model;
   drag.next=equal(original,box)?null:gridWithBounds(box);
-  if(expanded||drag.expanded)renderCells(state.seams,state);
+  if(expanded||drag.expanded)renderCells(state);
   drag.expanded=expanded;
   drag.trimBox=box;
   overlay.replaceChildren();
@@ -756,14 +697,13 @@ function previewPerimeter(box){
     if(besideRows&&n.x===right(box))mark.style.borderLeftWidth='3px';
     if(besideColumns&&bottom(n)===box.y)mark.style.borderBottomWidth='3px';
     if(besideColumns&&n.y===bottom(box))mark.style.borderTopWidth='3px';
-    const r=displayRect(n);
     if(overlaps(n,box)){
       for(let y=n.y;y<bottom(n);y++)for(let x=n.x;x<right(n);x++){
         if(contains(box,rect(x,y,1,1)))continue;
         const part=mark.cloneNode(false);
-        position(part,rect(r.x+(x-n.x)*r.w/n.w-view.x,r.y+(y-n.y)*r.h/n.h-view.y,r.w/n.w,r.h/n.h),state);overlay.append(part);
+        position(part,rect(x-view.x,y-view.y,1,1),state);overlay.append(part);
       }
-    }else{position(mark,rect(r.x-view.x,r.y-view.y,r.w,r.h),state);overlay.append(mark);}
+    }else{position(mark,rect(n.x-view.x,n.y-view.y,n.w,n.h),state);overlay.append(mark);}
   }
   if(expanded){
     for(let y=box.y;y<bottom(box);y++)for(let x=box.x;x<right(box);x++){
@@ -957,23 +897,21 @@ function moveGroup(members,dx,dy){
   positions.forEach((target,key)=>{next.feeds[target]=model.feeds[key]});
   next.active=positions[model.active];
   next.selection=model.selection?.map(key=>positions[key])??null;
-  const affected=[...members,...targets];
-  next.seams=next.seams.filter(s=>!affected.some(r=>seamTouches(s,r)));
   return {next,moves};
 }
 function areaAddress(r){return address(r)+'–'+address(rect(right(r)-1,bottom(r)-1,1,1))}
 function liftCells(g){
-  const members=g.members||[g.source],shape=members.map(n=>displayRect(n)),area=shape.reduce(bounds);
+  const members=g.members||[g.source],area=members.reduce(bounds);
   const box=wall.getBoundingClientRect(),unitX=box.width/model.width,unitY=box.height/model.height;
   const w=area.w*unitX,h=area.h*unitY;
   const layer=document.createElement('div'),cargo=document.createElement('div');
   layer.className='cell-lift';layer.setAttribute('aria-hidden','true');cargo.className='cell-cargo';
   Object.assign(cargo.style,{width:w+'px',height:h+'px'});
-  members.forEach((n,i)=>{
-    const r=shape[i],original=tiles.querySelector('[data-key="'+n.key+'"]');
-    const hole=document.createElement('div');hole.className='strip-hole';position(hole,r);layer.append(hole);
+  members.forEach(n=>{
+    const original=tiles.querySelector('[data-key="'+n.key+'"]');
+    const hole=document.createElement('div');hole.className='strip-hole';position(hole,n);layer.append(hole);
     const tile=document.createElement('div');tile.className='cargo-tile'+(original.classList.contains('empty')?' empty':'');
-    position(tile,rect(r.x-area.x,r.y-area.y,r.w,r.h),{width:area.w,height:area.h});
+    position(tile,rect(n.x-area.x,n.y-area.y,n.w,n.h),{width:area.w,height:area.h});
     tile.append(original.querySelector('.frame').cloneNode(true));cargo.append(tile);
   });
   layer.append(cargo);wall.append(layer);return {layer,cargo,w,h,area};
@@ -1003,19 +941,32 @@ function previewGroupMove(p){
     return;
   }
   drag.next=result.next;
-  drag.landing=members.map(n=>result.moves.find(m=>m.key===n.key).to).map(n=>displayRect(n,result.next.seams)).reduce(bounds);
+  drag.landing=members.map(n=>result.moves.find(m=>m.key===n.key).to).reduce(bounds);
   drag.message=members.length>1?'Перемещено ячеек: '+members.length:nameOf(source)+' · '+areaAddress(source)+' → '+areaAddress(box);
   const lines=[drag.message];
   for(const {key,to} of result.moves){
-    if(members.some(n=>n.key===key))placePreview(displayRect(to,result.next.seams),'move-target');
-    else lines.push((model.feeds[key]?.name??'Пусто')+' · '+address(model.nodes.find(n=>n.key===key))+' → '+address(to));
+    if(members.some(n=>n.key===key))placePreview(to,'move-target');
+    else {
+      const original=model.nodes.find(n=>n.key===key);
+      const feed=model.feeds[key];
+      lines.push((feed?.name??'Пусто')+' · '+address(original)+' → '+address(to));
+      if(feed){
+        const tile=document.createElement('div');
+        tile.className='tile move-preview';
+        tile.setAttribute('aria-hidden','true');
+        position(tile,to,result.next);
+        const frame=tiles.querySelector('[data-key="'+key+'"] .frame');
+        tile.append(frame.cloneNode(true));
+        overlay.append(tile);
+      }
+    }
   }
   info.textContent='При отпускании\n'+lines.join('\n');
 }
 // Regroup the affected rectangle while retaining its constituent cells and their contents.
 function reshape(box, source,base=model){
   const next=structuredClone(base),main=next.nodes.find(n=>n.key===source.key);
-  const keep=[],take=[],affected=bounds(main,box);
+  const keep=[],take=[];
   for(const n of next.nodes){
     if(n===main){
       for(const c of childrenOf(n)) collectPieces(c,box,take,keep);
@@ -1041,50 +992,7 @@ function reshape(box, source,base=model){
   }
   const selected=combined(take,box,key);
   next.nodes=[...keep,selected];next.active=selected.key;
-  next.seams=next.seams.filter(s=>!seamTouches(s,affected));
   return next;
-}
-function seamTouches(s,r){
-  return s.axis==='x'? s.at>=r.x&&s.at<=right(r)&&s.lo<bottom(r)&&s.hi>r.y
-    : s.at>=r.y&&s.at<=bottom(r)&&s.lo<right(r)&&s.hi>r.x;
-}
-function displayRect(node,seams=model.seams){
-  let l=node.x,t=node.y,r=right(node),b=bottom(node);
-  for(const s of seams){
-    if(s.axis==='x' && s.lo<=node.y && s.hi>=bottom(node)){
-      if(s.at===node.x)l+=s.d;if(s.at===right(node))r+=s.d;
-    }
-    if(s.axis==='y' && s.lo<=node.x && s.hi>=right(node)){
-      if(s.at===node.y)t+=s.d;if(s.at===bottom(node))b+=s.d;
-    }
-  }
-  return rect(l,t,r-l,b-t);
-}
-function seamFor(n,edge){
-  const x=edge==='e'||edge==='w',axisName=x?'x':'y';
-  const at=edge==='e'?right(n):edge==='w'?n.x:edge==='s'?bottom(n):n.y;
-  if(at===0||at===(x?model.width:model.height))return null;
-  const c=x?'y':'x',end=x?bottom:right;
-  let lo=n[c],hi=end(n),prev;
-  // Follow T-junctions so that every tile sharing this segment remains rectangular.
-  do{
-    prev=[lo,hi];
-    for(const t of model.nodes){
-      const touches=x?(t.x===at||right(t)===at):(t.y===at||bottom(t)===at);
-      if(touches&&t[c]<hi&&end(t)>lo){lo=Math.min(lo,t[c]);hi=Math.max(hi,end(t))}
-    }
-  }while(lo!==prev[0]||hi!==prev[1]);
-  const old=model.seams.find(s=>s.axis===axisName&&s.at===at&&s.lo===lo&&s.hi===hi);
-  return {axis:axisName,at,lo,hi,d:old?.d??0};
-}
-function withSeam(seam,d){
-  return [...model.seams.filter(s=>!(s.axis===seam.axis && s.at===seam.at && s.lo<seam.hi && s.hi>seam.lo)),{...seam,d}];
-}
-function validSeams(seams){
-  const cells=model.nodes.map(n=>displayRect(n,seams));
-  return cells.every(r=>r.w>=.28&&r.h>=.28)
-    && cells.every((r,i)=>cells.slice(i+1).every(t=> Math.min(right(r),right(t))-Math.max(r.x,t.x)<.00001 || Math.min(bottom(r),bottom(t))-Math.max(r.y,t.y)<.00001))
-    && Math.abs(cells.reduce((a,r)=>a+r.w*r.h,0)-model.width*model.height)<.00001;
 }
 function position(el,r,state=model){Object.assign(el.style,{left:(r.x*100/state.width)+'%',top:(r.y*100/state.height)+'%',width:(r.w*100/state.width)+'%',height:(r.h*100/state.height)+'%'})}
 function placePreview(r,cls){
@@ -1093,7 +1001,7 @@ function placePreview(r,cls){
 function highlightEdge(edge){
   overlay.replaceChildren();
   if(!edge)return;
-  const cue=document.createElement('div');cue.className='edge-cue';position(cue,displayRect(current()));
+  const cue=document.createElement('div');cue.className='edge-cue';position(cue,current());
   for(const [side,prop] of [['w','borderLeftWidth'],['e','borderRightWidth'],['n','borderTopWidth'],['s','borderBottomWidth']]){
     if(edge.includes(side))cue.style[prop]='var(--hover-edge-width)';
   }
@@ -1104,7 +1012,7 @@ function previewReturning(before,box,next,early=false){
   for(const n of next.nodes){
     if(!contains(before,n)||overlaps(box,n))continue;
     const tile=document.createElement('div'),frame=document.createElement('div'),feed=next.feeds[n.key];
-    tile.className='tile return-preview'+(early?' early':'')+(feed?'':' empty');position(tile,displayRect(n,next.seams));
+    tile.className='tile return-preview'+(early?' early':'')+(feed?'':' empty');position(tile,n);
     frame.className='frame';
     if(feed){
       const scene=document.createElement('div');scene.className='scene';scene.style.cssText=sceneStyle(feed);frame.append(scene);
@@ -1118,7 +1026,7 @@ function previewReturning(before,box,next,early=false){
 }
 function markAbsorbed(n,state=model){
   const mark=document.createElement('div');mark.className='absorb-preview';
-  position(mark,displayRect(n,state.seams),state);overlay.append(mark);
+  position(mark,n,state);overlay.append(mark);
 }
 function previewAbsorbed(box,next){
   const remaining=new Set(next.nodes.map(n=>n.key));
@@ -1148,13 +1056,13 @@ function sceneStyle(feed){
   const [x,y]=places[feed.variant];
   return 'background-image:var(--still-'+feed.pic+');transform:scale('+(1+(feed.id%4)*.09)+');background-position:'+(20+((x*27+feed.id*7)%65))+'% '+(18+((y*23+feed.id*9)%66))+'%';
 }
-function renderCells(seams=model.seams,state=model){
+function renderCells(state=model){
   tiles.replaceChildren();
   const frag=document.createDocumentFragment();
   for(const n of state.nodes){
     const feed=state.feeds[n.key], tile=document.createElement('div');
     tile.className='tile'+(n.key===state.active?' selected':'')+(state.selection?.includes(n.key)?' multi-picked':'')+(feed?'':' empty');
-    tile.dataset.key=n.key;position(tile,displayRect(n,seams),state);
+    tile.dataset.key=n.key;position(tile,n,state);
     const frame=document.createElement('div');frame.className='frame';
     if(feed){
       const scene=document.createElement('div');scene.className='scene';scene.style.cssText=sceneStyle(feed);frame.append(scene);
@@ -1188,17 +1096,17 @@ function point(e){
 }
 function hit(p){
   const x=clamp(p.x,0,model.width-.00001),y=clamp(p.y,0,model.height-.00001);
-  return model.nodes.find(n=>{const r=displayRect(n);return x>=r.x&&x<right(r)&&y>=r.y&&y<bottom(r)})||current();
+  return model.nodes.find(n=>x>=n.x&&x<right(n)&&y>=n.y&&y<bottom(n))||current();
 }
 function edgeAt(p){
   if(model.selection)return '';
-  const n=current(),r=displayRect(n),b=wall.getBoundingClientRect(),dx=6*model.width/b.width,dy=6*model.height/b.height;
+  const r=current(),b=wall.getBoundingClientRect(),dx=6*model.width/b.width,dy=6*model.height/b.height;
   const nearX=Math.abs(p.x-r.x)<=Math.min(2*dx,r.w/4)?'w':Math.abs(p.x-right(r))<=Math.min(2*dx,r.w/4)?'e':'';
   const nearY=Math.abs(p.y-r.y)<=Math.min(2*dy,r.h/4)?'n':Math.abs(p.y-bottom(r))<=Math.min(2*dy,r.h/4)?'s':'';
   if(nearX&&nearY)return nearY+nearX;
   if(p.x<r.x-dx||p.x>right(r)+dx||p.y<r.y-dy||p.y>bottom(r)+dy)return '';
   const nearMidY=Math.abs(p.y-r.y-r.h/2)<=2*dy,nearMidX=Math.abs(p.x-r.x-r.w/2)<=2*dx;
-  const xBand=Math.min((nearMidY?5:n.w>1?3:1)*dx,r.w/4),yBand=Math.min((nearMidX?5:n.h>1?3:1)*dy,r.h/4);
+  const xBand=Math.min((nearMidY?5:r.w>1?3:1)*dx,r.w/4),yBand=Math.min((nearMidX?5:r.h>1?3:1)*dy,r.h/4);
   const vx=Math.abs(p.x-r.x)<=xBand?'w':Math.abs(p.x-right(r))<=xBand?'e':'';
   const vy=Math.abs(p.y-r.y)<=yBand?'n':Math.abs(p.y-bottom(r))<=yBand?'s':'';
   return vy+vx;
@@ -1236,16 +1144,16 @@ function previewGridExtension(p,sx,sy){
   if(below)sy=base.height-bottom(source);
   const box=targetBox(source,edge,sx,sy,base);
   const next=reshape(box,source,base);
-  drag.extended=true;drag.smooth=false;drag.next=next;
+  drag.extended=true;drag.next=next;
   overlay.replaceChildren();
   if(!next){
     renderCells();renderGridSize();
     $('return-info').textContent='Здесь граница пересекает соседнюю область. Захватите её целиком.';
     return true;
   }
-  renderCells(next.seams,next);
+  renderCells(next);
   const border=document.createElement('div');border.className='outline pending';
-  position(border,displayRect(current(next),next.seams),next);overlay.append(border);
+  position(border,current(next),next);overlay.append(border);
   const size=next.width+' × '+next.height;
   document.querySelector('.badge').textContent=width+' × '+height+' → '+size;
   drag.message='Сетка '+size+' · '+nameOf(source,base)+' занимает '+box.w+' × '+box.h+'.';
@@ -1259,18 +1167,15 @@ function previewGridExtension(p,sx,sy){
 }
 function resizePreview(p){
   drag.redraw=()=>resizePreview(p);
-  const {source,edge,start,seam}=drag,dx=p.x-start.x,dy=p.y-start.y;
+  const {source,edge,start}=drag,dx=p.x-start.x,dy=p.y-start.y;
   $('return-info').textContent='';
-  const horiz=edge.includes('e')||edge.includes('w');
-  const delta=(horiz?dx:dy)+(seam?.d??0);
-  const sx=step(edge.length===1&&horiz?delta:dx),sy=step(edge.length===1&&!horiz?delta:dy);
+  const sx=step(dx),sy=step(dy);
   if(previewGridExtension(p,sx,sy))return;
   const box=targetBox(source,edge,sx,sy);
   if(!equal(box,source)){
-    if(drag.smooth){renderCells();drag.smooth=false}
     const next=reshape(box,source);drag.next=next;
     overlay.replaceChildren();placePreview(box,next?'pending':'pending invalid');
-    if(!next){say('У соседа останется Г-образная часть. Захватите его целиком или используйте «Область».');return}
+    if(!next){say('У соседа останется Г-образная часть. Захватите его целиком.');return}
     const crop=croppedBounds(next,
       source.x===0?Math.max(0,box.x-source.x):0,
       source.y===0?Math.max(0,box.y-source.y):0,
@@ -1281,7 +1186,7 @@ function resizePreview(p){
       drag.extended=true;
       drag.next=showCroppedGrid(next,crop);
       const selected=current(drag.next),mark=document.createElement('div');
-      mark.className='outline pending';position(mark,displayRect(selected,drag.next.seams),drag.next);overlay.append(mark);
+      mark.className='outline pending';position(mark,selected,drag.next);overlay.append(mark);
       drag.message='Сетка '+crop.w+' × '+crop.h+' · '+nameOf(selected,drag.next)+' занимает '+box.w+' × '+box.h+'.';
       $('return-info').textContent='При отпускании: '+drag.message;
       return;
@@ -1302,21 +1207,11 @@ function resizePreview(p){
     const next=reshape(earlyBox,source);
     if(next)previewReturning(source,earlyBox,next,true);
   }
-  if(edge.length===1&&seam&&Math.abs(delta)<.65){
-    const d=Math.round(delta*100)/100,seams=withSeam(seam,d);
-    if(validSeams(seams)){
-      const next={...model,seams};
-      drag.next=d===seam.d?null:next;drag.smooth=true;renderCells(seams);
-      drag.message='Пропорции изменены. Содержимое соседей сохранено.';
-      say('Меняются пропорции. Потяните дальше для перехода на один шаг сетки.');return;
-    }
-  }
-  if(drag.smooth){renderCells();drag.smooth=false}
   say('Тяните к следующей позиции сетки. Минимальная ячейка — 1 × 1, границы задаёт внешнее кольцо.');
 }
 function cursorHint(edge,node){
   if(edge.length===2)return 'Угол выбранной ячейки. Тяните по диагонали для поглощения. Тяните внутрь для возврата.';
-  if(edge)return 'Граница выбранной ячейки. Небольшой сдвиг меняет пропорции, большой — состав ячеек.';
+  if(edge)return 'Граница выбранной ячейки. Тяните к соседней линии сетки.';
   return 'Центр '+address(node)+' · '+nameOf(node)+'. Нажмите для выбора или перетащите содержимое.';
 }
 wall.addEventListener('pointerdown',e=>{
@@ -1333,7 +1228,7 @@ wall.addEventListener('pointerdown',e=>{
   const members=model.selection?.includes(source.key)?model.nodes.filter(n=>model.selection.includes(n.key)):null;
   if(!members)choose(source.key);
   wall.focus({preventScroll:true});wall.setPointerCapture(e.pointerId);
-  drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,seam:edge.length===1?seamFor(source,edge):null,next:null};
+  drag={kind:edge?'resize':'move',source,edge,start:p,clientX:e.clientX,clientY:e.clientY,id:e.pointerId,moved:false,members,next:null};
 });
 wall.addEventListener('pointermove',e=>{
   const p=point(e);
@@ -1352,7 +1247,7 @@ wall.addEventListener('pointermove',e=>{
   if(drag.source.children||drag.members){wall.style.cursor='grabbing';previewGroupMove(p);return}
   const target=hit(p),source=drag.source;
   overlay.replaceChildren();
-  if(target.key!==source.key&&p.x>=0&&p.y>=0&&p.x<model.width&&p.y<model.height)placePreview(displayRect(target),'move-target');
+  if(target.key!==source.key&&p.x>=0&&p.y>=0&&p.x<model.width&&p.y<model.height)placePreview(target,'move-target');
   wall.style.cursor='grabbing';
   say(target.key===source.key?'Тяните в целевую ячейку.':nameOf(target)==='Пусто'?'Переместить '+nameOf(source)+' в '+address(target)+'.':'Обменять '+nameOf(source)+' ↔ '+nameOf(target)+'. Размеры позиций сохранятся.');
 });
@@ -1396,7 +1291,7 @@ wall.addEventListener('pointerup',e=>{
     if(!model.feeds[g.source.key]&&!model.feeds[target.key]){say('Обе ячейки пусты.');return}
     const next=structuredClone(model);swapPayload(next,g.source.key,target.key);next.active=target.key;
     remember(next,'Содержимое '+address(g.source)+' и '+address(target)+' поменялось местами.');
-    landCargo(g.visual.cargo,g.visual.w,g.visual.h,displayRect(target));return;
+    landCargo(g.visual.cargo,g.visual.w,g.visual.h,target);return;
   }
   render();say(g.moved?'Геометрия сохранена без изменений.':'Выбрана '+address(g.source)+' · '+nameOf(g.source)+'. Тяните центр, границу или угол.');
 });
