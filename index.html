@@ -661,7 +661,6 @@ function stripGrip(dir,i,count){
     b.onpointermove(e);drag=null;g.visual?.layer.remove();b.releasePointerCapture(e.pointerId);
     if(!g.moved){selectStrip(dir,i,g.range);return}
     if(g.next){
-      stripPick={dir,indices:g.positions,anchor:g.positions[g.indices.indexOf(i)],model:g.next};
       remember(g.next,g.message);
       landStrips(g);
     }else{render();if(g.reason)$('return-info').textContent=g.reason;say(g.reason||'Полосы остались на своих местах.')}
