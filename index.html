@@ -1252,43 +1252,80 @@ function previewCorner(e,p){
   g.drawn=boxes;g.next=candidate===model?null:candidate;
   g.message='Пропорции ячеек изменены.';g.redraw=null;
 }
+function dividerStage(base,seam,border){
+  const boxes=visibleBoxes(base),group=seamComponent(base,boxes,seam.axis,seam.line,seam.at);
+  return {...seam,base,group,border:group?.border??border,advances:new Map(),
+    affected:group?group.before.concat(group.after):[],limits:group?seamLimits(group,boxes,1e-5):null,
+    size:{width:base.width,height:base.height}};
+}
+function showDividerStage(stage){
+  stage.elements=new Map(stage.base.nodes.map((n,i)=>[n,tiles.children[i]]));
+  stage.live=null;stage.fixed=0;stage.next=null;stage.dest=undefined;stage.absorbMarkers=[];
+}
 function beginDivider(e,seam){
-  const boxes=visibleBoxes(model),group=seamComponent(model,boxes,seam.axis,seam.line,seam.at);
-  if(!group)return false;
-  const start=seam.axis==='x'?e.clientX:e.clientY;
-  drag={kind:'divider',id:e.pointerId,...seam,start,group,limits:seamLimits(group,boxes,1e-5),next:null};
-  drag.affected=group.before.concat(group.after);
-  drag.elements=new Map(model.nodes.map((node,i)=>[node,tiles.children[i]]));
-  drag.size={width:model.width,height:model.height};
+  const first=dividerStage(model,seam);
+  if(!first.group)return false;
+  showDividerStage(first);
+  drag={kind:'divider',id:e.pointerId,first,stage:first,start:seam.axis==='x'?e.clientX:e.clientY};
   wall.setPointerCapture(e.pointerId);return true;
 }
 function fixedDividerLayout(g,sign,click=false){
-  const sides=sign>0?g.group.before:g.group.after,boxes=visibleBoxes(model);
-  const receiver=click?current():sides.find(n=>{
+  const state=g.base,sides=sign>0?g.group.before:g.group.after,boxes=visibleBoxes(state);
+  const receiver=click?current(state):sides.find(n=>{
     const b=boxes.get(n);
     return b[g.cross]<=g.tangent&&g.tangent<b[g.cross]+b[g.group.length];
   })||sides[0];
   const edge=click?g.edge:(g.axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n'));
-  const anchor=slot(receiver.key),far='es'.includes(edge),extent=g.group.span;
+  const anchor=slot(receiver.key,state.width),far='es'.includes(edge),extent=g.group.span;
   const release=click&&receiver.children&&(far?anchor[g.axis]<receiver[g.axis]+receiver[extent]-1:anchor[g.axis]>receiver[g.axis]);
   const step=(far?1:-1)*(release?-1:1);
-  const area=targetBox(receiver,edge,g.axis==='x'?step:0,g.axis==='y'?step:0);
+  const area=targetBox(receiver,edge,g.axis==='x'?step:0,g.axis==='y'?step:0,state);
   if(equal(receiver,area))return null;
-  const origin=model.origin||{x:0,y:0};
-  const base={...model,seams:[...(model.seams||[]),{axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:0}]};
+  const origin=state.origin||{x:0,y:0};
+  const base={...state,seams:[...(state.seams||[]),{axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:0}]};
   return reshape(area,receiver,base);
 }
+function advanceDivider(stage,sign){
+  if(stage.advances.has(sign))return stage.advances.get(sign);
+  const base=fixedDividerLayout(stage,sign);
+  let next=null;
+  if(base){
+    const {axis,cross,scale,tangent}=stage,n=current(base),span=stage.group.span;
+    const edge=axis==='x'?(sign>0?'e':'w'):(sign>0?'s':'n');
+    const line=n[axis]+(sign>0?n[span]:0),box=visualRect(n,base);
+    const border=box[axis]+(sign>0?box[span]:0);
+    if(sign*(border-stage.border)>1e-7){
+      next=dividerStage(base,{axis,cross,scale,tangent,edge,line,at:n[cross]},border);
+    }
+  }
+  stage.advances.set(sign,next);return next;
+}
 function previewDivider(e){
-  const g=drag,px=(g.axis==='x'?e.clientX:e.clientY)-g.start;
-  if(!g.moved&&Math.abs(px)<4)return;
-  if(g.lastPx===px)return;
-  g.moved=true;g.lastPx=px;
-  const boxes=visibleBoxes(model),sign=Math.sign(px),dest=clamp(g.group.border+px/g.scale,...g.limits);
+  const gesture=drag,first=gesture.first,px=(first.axis==='x'?e.clientX:e.clientY)-gesture.start;
+  if((!gesture.moved&&Math.abs(px)<4)||gesture.lastPx===px)return;
+  gesture.moved=true;gesture.lastPx=px;
+  const target=first.border+px/first.scale,dir=Math.sign(px);
+  let g=first;
+  while(dir&&g.group){
+    const next=advanceDivider(g,dir);
+    if(!next||dir*(target-next.border)<-1e-8)break;
+    g=next;
+  }
+  if(gesture.stage!==g){
+    gesture.stage.elements=null;gesture.stage.live=null;gesture.stage.absorbMarkers=[];
+    renderCells(g.base);overlay.replaceChildren();showDividerStage(g);gesture.stage=g;
+  }
+  if(!g.group){
+    const b=visualRect(current(g.base),g.base);
+    paintDividerLine(g.axis,b,g.border,g.base);return;
+  }
+  const boxes=visibleBoxes(g.base),travel=px-(g.border-first.border)*g.scale;
+  const sign=Math.sign(travel),dest=clamp(target,...g.limits);
   const shrinking=sign>0?g.group.after:g.group.before;
-  const remaining=Math.min(...shrinking.map(n=>boxes.get(n)[g.group.span]*g.scale))-Math.abs(px);
-  const fixed=sign&&remaining<(g.fixed===sign?82:80)?sign:0;
+  const remaining=Math.min(...shrinking.map(n=>boxes.get(n)[g.group.span]*g.scale))-Math.abs(travel);
+  const fixed=sign&&(g===first||Math.abs(travel)>=4)&&remaining<(g.fixed===sign?82:80)?sign:0;
   if(g.fixed!==fixed){
-    g.fixed=fixed;g.next=fixed?fixedDividerLayout(g,fixed):null;
+    g.fixed=fixed;g.next=fixed?advanceDivider(g,fixed)?.base:null;
     overlay.replaceChildren();g.absorbMarkers=[];
     if(g.next){
       const border=document.createElement('div');
@@ -1311,16 +1348,17 @@ function previewDivider(e){
     position(g.elements.get(n),b,g.size);
   }
   for(const {n,mark} of g.absorbMarkers||[])position(mark,live.get(n),g.size);
-  paintDivider(g.group,model,live);
+  paintDivider(g.group,g.base,live);
 }
 function fractionalResult(g){
-  if(g.dest===undefined||Math.abs(g.dest-g.group.border)<1e-8)return null;
-  const origin=model.origin||{x:0,y:0};
+  const state=g.base;
+  if(g.dest===undefined||Math.abs(g.dest-g.border)<1e-8)return null;
+  const origin=state.origin||{x:0,y:0};
   const record={axis:g.axis,line:g.line+origin[g.axis],at:g.at+origin[g.cross],delta:g.dest-g.line};
-  const seams=[...(model.seams||[])],last=seams.at(-1);
+  const seams=[...(state.seams||[])],last=seams.at(-1);
   if(last&&last.axis===record.axis&&last.line===record.line&&last.at===record.at)seams.pop();
   if(Math.abs(record.delta)>1e-8||seams.length)seams.push(record);
-  const next={...model,seams},b=visibleBoxes(next).get(g.group.before[0]);
+  const next={...state,seams},b=visibleBoxes(next).get(g.group.before[0]);
   return Math.abs(b[g.axis]+b[g.group.span]-g.dest)<1e-5?next:null;
 }
 function settleDivider(g,next){
@@ -1332,7 +1370,7 @@ function settleDivider(g,next){
       previous.push({key:n.key,from:tile.getBoundingClientRect(),tile});
     }
   }
-  remember(next,'Граница изменена на одну позицию.');
+  remember(next,'Граница ячейки изменена.');
   const wallRect=wall.getBoundingClientRect(),timing={duration:120,easing:'ease-out'};
   for(const {key,from,tile} of previous){
     const target=tiles.querySelector('[data-key="'+key+'"]');
@@ -1351,11 +1389,14 @@ function settleDivider(g,next){
   }
 }
 function paintDivider(group,state,boxes=visibleBoxes(state)){
-  const bar=overlay.querySelector('.shared-divider')||document.createElement('div'),vertical=group.axis==='x';
-  bar.className='shared-divider '+(vertical?'vertical':'horizontal');
   const b=group.before.map(n=>boxes.get(n)).reduce(bounds);
   const end=boxes.get(group.before[0]);
-  const x=vertical?right(end):b.x,y=vertical?b.y:bottom(end);
+  paintDividerLine(group.axis,b,group.axis==='x'?right(end):bottom(end),state);
+}
+function paintDividerLine(axis,b,border,state){
+  const bar=overlay.querySelector('.shared-divider')||document.createElement('div'),vertical=axis==='x';
+  bar.className='shared-divider '+(vertical?'vertical':'horizontal');
+  const x=vertical?border:b.x,y=vertical?b.y:border;
   Object.assign(bar.style,{left:100*x/state.width+'%',top:100*y/state.height+'%',
     [vertical?'height':'width']:100*(vertical?b.h/state.height:b.w/state.width)+'%'});
   if(!bar.parentNode)overlay.append(bar);
@@ -1677,7 +1718,7 @@ wall.addEventListener('pointerdown',e=>{
   if((e.ctrlKey||e.metaKey)){clearInsertionPreview();togglePicked(target.key);return}
   if(e.shiftKey){clearInsertionPreview();pickRange(target);return}
   const seam=dividerAt(e,edge);
-  if(seam&&beginDivider(e,seam)){clearInsertionPreview();paintDivider(drag.group,model);return}
+  if(seam&&beginDivider(e,seam)){clearInsertionPreview();paintDivider(drag.first.group,model);return}
   const strip=!edge?innerStrip(p):null;
   if(strip){startStrip(e,strip.dir,strip.index);return}
   clearInsertionPreview();
@@ -1743,13 +1784,13 @@ wall.addEventListener('pointerup',e=>{
   if(!drag||e.pointerId!==drag.id)return;
   if(drag.kind==='divider'){
     previewDivider(e);
-    const g=drag;drag=null;
+    const {stage:g,moved}=drag;drag=null;
     if(wall.hasPointerCapture(e.pointerId))wall.releasePointerCapture(e.pointerId);
-    if(!g.moved&&g.onGrip)g.next=fixedDividerLayout(g,'es'.includes(g.edge)?1:-1,true);
-    if(g.next&&g.moved)settleDivider(g,g.next);
+    if(!moved&&g.onGrip)g.next=fixedDividerLayout(g,'es'.includes(g.edge)?1:-1,true);
+    if(g.next&&moved)settleDivider(g,g.next);
     else{
-      const next=g.next||fractionalResult(g);
-      if(next)remember(next,'Пропорции соседних ячеек изменены.');else render();
+      const next=g.next||fractionalResult(g)||g.base;
+      if(next!==model)remember(next,'Пропорции соседних ячеек изменены.');else render();
     }
     overlay.replaceChildren();return;
   }
@@ -1820,6 +1861,11 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&['KeyZ','KeyY'].includes(e.code)){e.preventDefault();history(e.code==='KeyY'||e.shiftKey)}
 });
 const sample=new URLSearchParams(location.search).get('sample');
+if(sample==='absorb-down'){
+  model=seed(4);
+  model=reshape(rect(0,1,2,1),model.nodes[4],model);
+  model.feeds[model.active]=null;
+}
 if(sample==='corner-proportions'){model=seed(4);model.active=2;}
 if(sample==='proportions'){model=seed(2);model.active=2;}
 if(sample==='3x3'||sample==='2x2'){
